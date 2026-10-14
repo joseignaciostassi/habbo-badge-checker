@@ -16,6 +16,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <nav>
             <Link href="/">Verificar</Link>
             <Link href="/scan">Escaneo</Link>
+            <Link href="/calibrate">Calibración</Link>
           </nav>
         </header>
         <main>{children}</main>

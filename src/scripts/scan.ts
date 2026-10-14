@@ -16,9 +16,9 @@ const { values: args } = parseArgs({
 
 async function main() {
   const t = {
-    dhash: args.dhash ? Number(args.dhash) : config.thresholds.dhash,
-    silhouette: args.sil ? Number(args.sil) : config.thresholds.silhouette,
-    design: args.design ? Number(args.design) : config.thresholds.design,
+    dhash: args.dhash ? Number(args.dhash) : config.scanThresholds.dhash,
+    silhouette: args.sil ? Number(args.sil) : config.scanThresholds.silhouette,
+    design: args.design ? Number(args.design) : config.scanThresholds.design,
   };
   const repo = new ScanRepository();
   const startedAt = new Date();
