@@ -13,7 +13,9 @@ interface State {
 
 const LABEL_TEXT: Record<Label, string> = { similar: "Parecida", different: "No parecida", unsure: "No sé" };
 const pct = (v: number | null) => (v === null ? "–" : `${(v * 100).toFixed(0)}%`);
-const range = (lo: number, hi: number) => `${Math.round(lo * 100)}–${Math.min(100, Math.round(hi * 100))}%`;
+/** Score bound as a percentage with at most one decimal: "72.5%", "75%". */
+const bound = (v: number) => `${Math.round(Math.min(1, v) * 1000) / 10}%`;
+const range = (lo: number, hi: number) => `${bound(lo).slice(0, -1)}–${bound(hi)}`;
 
 export function Labeler() {
   const [state, setState] = useState<State | null>(null);
@@ -131,7 +133,7 @@ export function Labeler() {
           <tbody>
             {state.table.map((r) => (
               <tr key={r.threshold}>
-                <td>≥ {Math.round(r.threshold * 100)}%</td>
+                <td>≥ {bound(r.threshold)}</td>
                 <td>{r.pairs.toLocaleString("es-AR")}</td>
                 <td>{pct(r.precision)}</td>
                 <td>{pct(r.recall)}</td>
@@ -143,7 +145,7 @@ export function Labeler() {
         </table>
         <p className="meta">
           Precisión: de los pares que se reportarían, cuántos son parecidos según tus etiquetas. Cobertura: de los pares
-          parecidos con diseño ≥ 55%, cuántos se reportarían. Falsos por consulta: placas no relacionadas que aparecerían
+          parecidos con diseño ≥ {state.strata.length ? bound(state.strata[0].lo) : "–"}, cuántos se reportarían. Falsos por consulta: placas no relacionadas que aparecerían
           en promedio al verificar una placa.
         </p>
       </div>

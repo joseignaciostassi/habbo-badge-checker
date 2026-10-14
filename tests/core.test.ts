@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 import { analyzeBadge } from "../src/core/analyze";
 import { exactMatch, isSimilar, perceptualDistance } from "../src/core/compare";
 import { cleanAlpha, normalize40, sizeNote } from "../src/core/normalize";
+import { edgeIoU, edgeMap } from "../src/core/perceptual";
 import { blank, border, design, getPx, mapColors, paste, setPx, toGif, toPng } from "./helpers";
 
-const SIM = { dhash: 20, silhouette: 10, design: 0.8 };
+const SIM = { dhash: 20, silhouette: 10, design: 0.575 };
 const RED = [220, 30, 40, 255] as const;
 const WHITE = [255, 255, 255, 255] as const;
 
@@ -116,6 +117,19 @@ describe("main detection cases", () => {
     const swapped = mapColors(orig, ([r, g, b, a]) => [g, b, r, a]);
     const d = perceptualDistance(await analyzeBadge(await toPng(orig)), await analyzeBadge(await toPng(swapped)))!;
     expect(d.design).toBeGreaterThan(0.95);
+  });
+
+  it("horizontal vs vertical stripes do NOT share the design (edges are oriented)", () => {
+    // Every pixel is a boundary in both, but along different axes.
+    const rows = blank(40, 40), cols = blank(40, 40);
+    for (let y = 0; y < 40; y++) {
+      for (let x = 0; x < 40; x++) {
+        setPx(rows, x, y, y % 2 ? [...RED] : [...WHITE]);
+        setPx(cols, x, y, x % 2 ? [...RED] : [...WHITE]);
+      }
+    }
+    expect(edgeIoU(edgeMap(rows), edgeMap(rows))).toBe(1);
+    expect(edgeIoU(edgeMap(rows), edgeMap(cols))).toBe(0);
   });
 });
 

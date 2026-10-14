@@ -58,14 +58,21 @@ export function silhouetteHash(img: RgbaImage): bigint {
 
 /** Edge map row width: 40 pixels + 1 zero padding column, so 1px shifts never wrap rows. */
 export const EDGE_ROW = 41;
-export const EDGE_BITS = 40 * EDGE_ROW;
+/** Rows of zero padding between the two planes, so 1px shifts never cross from one to the other. */
+const EDGE_GAP_ROWS = 2;
+/** Start of the second plane (bottom-neighbour boundaries); the first (right-neighbour) starts at 0. */
+const EDGE_PLANE2 = (40 + EDGE_GAP_ROWS) * EDGE_ROW;
+export const EDGE_BITS = EDGE_PLANE2 + 40 * EDGE_ROW;
 /** Sum of |dR|+|dG|+|dB| above which two visible neighbours count as a color boundary. */
 const EDGE_COLOR_DIFF = 48;
 
 /**
- * Color-boundary map of a normalized 40x40 frame: a pixel is set when it differs from its
- * right or bottom neighbour (visibility change, or color change). It captures the pixel-art
- * design while ignoring the palette, so recolored versions keep the same map.
+ * Oriented color-boundary map of a normalized 40x40 frame, in two planes: the first marks
+ * pixels that differ from their right neighbour (vertical boundaries), the second those that
+ * differ from their bottom neighbour (horizontal boundaries). A difference is a visibility
+ * change or a color change. It captures the pixel-art design while ignoring the palette, so
+ * recolored versions keep the same map; keeping orientations apart stops a horizontal stroke
+ * from matching a vertical one.
  */
 export function edgeMap(img: RgbaImage): Uint8Array {
   const d = img.data;
@@ -79,15 +86,16 @@ export function edgeMap(img: RgbaImage): Uint8Array {
   for (let y = 0; y < 40; y++) {
     for (let x = 0; x < 40; x++) {
       const p = (y * 40 + x) * 4;
-      if ((x < 39 && differ(p, p + 4)) || (y < 39 && differ(p, p + 160))) map[y * EDGE_ROW + x] = 1;
+      if (x < 39 && differ(p, p + 4)) map[y * EDGE_ROW + x] = 1;
+      if (y < 39 && differ(p, p + 160)) map[EDGE_PLANE2 + y * EDGE_ROW + x] = 1;
     }
   }
   return map;
 }
 
 /**
- * Design similarity: best intersection-over-union of two edge maps over the 9 shifts
- * of up to 1px. Mirrors the SQL function edge_iou().
+ * Design similarity: best intersection-over-union of two edge maps (both planes together)
+ * over the 9 shifts of up to 1px. Mirrors the SQL function edge_iou().
  */
 export function edgeIoU(a: Uint8Array, b: Uint8Array): number {
   let best = 0;

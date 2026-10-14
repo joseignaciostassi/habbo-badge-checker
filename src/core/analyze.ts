@@ -5,7 +5,7 @@ import { cleanAlpha, isEmpty, normalize40, sizeNote } from "./normalize";
 import { dHash, edgeMap, silhouetteHash } from "./perceptual";
 
 /** Bump when fingerprints change: the indexer reprocesses badges with an older version. */
-export const ANALYSIS_VERSION = 2;
+export const ANALYSIS_VERSION = 3;
 import type { BadgeAnalysis, ExactHash, FrameFingerprint, RgbaImage } from "./types";
 
 /** Drops repeated frames (identical pixels after alpha cleaning). */

@@ -1,4 +1,5 @@
 import type pg from "pg";
+import type { Thresholds } from "../config";
 import type { StratumStats } from "../core/calibration";
 import type { BadgeInfo } from "./badgeRepo";
 import { getPool } from "./db";
@@ -12,7 +13,8 @@ export interface CalibrationPair {
   dhash: number;
   silhouette: number;
   design: number;
-  stratum: number;
+  /** Sampling stratum of the current design score; null once it falls below the sampled range. */
+  stratum: number | null;
 }
 
 const badge = (r: Record<string, unknown>, p: "a" | "b"): BadgeInfo => ({
@@ -37,9 +39,31 @@ export class CalibrationRepository {
     return rows[0].n > 0;
   }
 
-  /** Replaces strata populations; adds sampled pairs, keeping existing pairs and their labels. */
+  /**
+   * Current design score of every sampled pair (best frame pair within the hash prefilter,
+   * as in the scan), or null when no frame pair passes it.
+   */
+  async currentScores(t: Thresholds): Promise<{ id: number; a: number; b: number; design: number | null }[]> {
+    const { rows } = await this.pool.query(
+      `SELECT p.id, p.a, p.b, max(edge_iou(f.edges, g.edges)) AS design
+       FROM calibration_pairs p
+       LEFT JOIN badge_frames f ON f.badge_id = p.a AND NOT f.empty
+       LEFT JOIN badge_frames g ON g.badge_id = p.b AND NOT g.empty
+         AND bit_count((f.dhash # g.dhash)::bit(64)) <= $1
+         AND bit_count((f.silhouette # g.silhouette)::bit(64)) <= $2
+       GROUP BY p.id`,
+      [t.dhash, t.silhouette],
+    );
+    return rows;
+  }
+
+  /**
+   * Replaces strata (bounds and populations), re-stratifies existing pairs by their current
+   * score (keeping their labels) and adds the newly sampled pairs.
+   */
   async saveSample(
     strata: { stratum: number; lo: number; hi: number; population: number }[],
+    existing: { id: number; design: number | null; stratum: number | null }[],
     pairs: { a: number; b: number; dhash: number; silhouette: number; design: number; stratum: number }[],
   ): Promise<void> {
     const client = await this.pool.connect();
@@ -52,6 +76,12 @@ export class CalibrationRepository {
           [s.stratum, s.lo, s.hi, s.population],
         );
       }
+      await client.query(
+        `UPDATE calibration_pairs p SET design = coalesce(u.design, 0), stratum = u.stratum
+         FROM unnest($1::int[], $2::real[], $3::int[]) AS u(id, design, stratum) WHERE p.id = u.id`,
+        [existing.map((p) => p.id), existing.map((p) => p.design), existing.map((p) => p.stratum)],
+      );
+      await client.query("DELETE FROM calibration_strata WHERE stratum >= $1", [strata.length]);
       await client.query(
         `INSERT INTO calibration_pairs (a, b, dhash, silhouette, design, stratum)
          SELECT * FROM unnest($1::int[], $2::int[], $3::int[], $4::int[], $5::real[], $6::int[])

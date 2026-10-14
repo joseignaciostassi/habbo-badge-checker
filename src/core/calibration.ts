@@ -1,9 +1,13 @@
-/** Design-score strata used for sampling: [lo, hi). The last one includes 1.0. */
-export const STRATA: [number, number][] = [
-  [0.55, 0.6], [0.6, 0.65], [0.65, 0.7], [0.7, 0.75], [0.75, 0.8],
-  [0.8, 0.85], [0.85, 0.9], [0.9, 0.95], [0.95, 1.0001],
-];
+/**
+ * Design-score strata used for sampling: [lo, hi), 2.5-point bands from 45%. The last one
+ * includes 1.0. Thresholds can only be estimated at these boundaries.
+ */
+export const STRATA: [number, number][] = Array.from({ length: 22 }, (_, i) => {
+  const lo = Math.round((0.45 + i * 0.025) * 1000) / 1000;
+  return [lo, i === 21 ? 1.0001 : Math.round((lo + 0.025) * 1000) / 1000];
+});
 
+/** Stratum index of a design score, or -1 below the sampled range. */
 export function stratumOf(design: number): number {
   return STRATA.findIndex(([lo, hi]) => design >= lo && design < hi);
 }

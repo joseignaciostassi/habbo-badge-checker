@@ -6,10 +6,12 @@ const s = (stratum: number, lo: number, hi: number, population: number, similar:
 
 describe("calibration estimates", () => {
   it("maps design scores to strata, including 1.0", () => {
-    expect(stratumOf(0.5)).toBe(-1);
-    expect(stratumOf(0.55)).toBe(0);
-    expect(stratumOf(0.8)).toBe(5);
-    expect(stratumOf(1)).toBe(8);
+    expect(stratumOf(0.44)).toBe(-1);
+    expect(stratumOf(0.45)).toBe(0);
+    expect(stratumOf(0.6)).toBe(6);
+    expect(stratumOf(0.725)).toBe(11);
+    expect(stratumOf(0.99)).toBe(21);
+    expect(stratumOf(1)).toBe(21);
   });
 
   it("weights labeled shares by stratum population", () => {

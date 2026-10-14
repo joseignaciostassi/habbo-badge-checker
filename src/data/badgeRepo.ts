@@ -1,7 +1,7 @@
 import type pg from "pg";
 import type { Thresholds } from "../config";
 import { ANALYSIS_VERSION } from "../core/analyze";
-import { edgeMapToBits } from "../core/perceptual";
+import { EDGE_BITS, edgeMapToBits } from "../core/perceptual";
 import type { BadgeAnalysis, ExactKind, FrameFingerprint } from "../core/types";
 import { getPool } from "./db";
 
@@ -106,7 +106,7 @@ export class PgBadgeRepository implements BadgeRepository {
         );
         await client.query(
           `INSERT INTO badge_frames (badge_id, frame_idx, dhash, silhouette, empty, edges)
-           SELECT $1, f, d, s, e, g::bit(1640)
+           SELECT $1, f, d, s, e, g::bit(${EDGE_BITS})
            FROM unnest($2::int[], $3::bigint[], $4::bigint[], $5::bool[], $6::text[]) AS u(f, d, s, e, g)`,
           [
             id,
@@ -156,7 +156,7 @@ export class PgBadgeRepository implements BadgeRepository {
     if (!frames.length) return [];
     const { rows } = await this.pool.query(
       `WITH q AS (
-         SELECT d AS dhash, s AS silhouette, g::bit(1640) AS edges
+         SELECT d AS dhash, s AS silhouette, g::bit(${EDGE_BITS}) AS edges
          FROM unnest($1::bigint[], $2::bigint[], $3::text[]) AS u(d, s, g)
        ),
        pre AS (
