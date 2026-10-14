@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { mkdir, writeFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
-import { analyzeBadge } from "../core/analyze";
+import { ANALYSIS_VERSION, analyzeBadge } from "../core/analyze";
 import { type BadgeToSave, PgBadgeRepository } from "../data/badgeRepo";
 import { closePool } from "../data/db";
 import { getImageStore } from "../storage/localFsStore";
@@ -29,7 +29,12 @@ async function main() {
   files.sort((a, b) => a.name.localeCompare(b.name));
   let pending = files.filter((f) => {
     const prev = indexed.get(f.name);
-    return !prev || prev.size !== f.size || prev.mtime.getTime() !== f.mtime.getTime();
+    return (
+      !prev ||
+      prev.size !== f.size ||
+      prev.mtime.getTime() !== f.mtime.getTime() ||
+      prev.version < ANALYSIS_VERSION
+    );
   });
   if (args.limit) pending = pending.slice(0, Number(args.limit));
 

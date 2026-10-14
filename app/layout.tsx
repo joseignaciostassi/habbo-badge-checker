@@ -15,6 +15,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Link href="/" className="brand">Badge Checker</Link>
           <nav>
             <Link href="/">Verificar</Link>
+            <Link href="/scan">Escaneo</Link>
           </nav>
         </header>
         <main>{children}</main>

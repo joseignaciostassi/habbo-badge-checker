@@ -56,6 +56,58 @@ export function silhouetteHash(img: RgbaImage): bigint {
   return bitsToSigned64(Array.from(small, (v) => (v >= 0.5 ? 1 : 0)));
 }
 
+/** Edge map row width: 40 pixels + 1 zero padding column, so 1px shifts never wrap rows. */
+export const EDGE_ROW = 41;
+export const EDGE_BITS = 40 * EDGE_ROW;
+/** Sum of |dR|+|dG|+|dB| above which two visible neighbours count as a color boundary. */
+const EDGE_COLOR_DIFF = 48;
+
+/**
+ * Color-boundary map of a normalized 40x40 frame: a pixel is set when it differs from its
+ * right or bottom neighbour (visibility change, or color change). It captures the pixel-art
+ * design while ignoring the palette, so recolored versions keep the same map.
+ */
+export function edgeMap(img: RgbaImage): Uint8Array {
+  const d = img.data;
+  const differ = (p: number, q: number) => {
+    const av = d[p + 3] > 0, bv = d[q + 3] > 0;
+    if (av !== bv) return true;
+    if (!av) return false;
+    return Math.abs(d[p] - d[q]) + Math.abs(d[p + 1] - d[q + 1]) + Math.abs(d[p + 2] - d[q + 2]) > EDGE_COLOR_DIFF;
+  };
+  const map = new Uint8Array(EDGE_BITS);
+  for (let y = 0; y < 40; y++) {
+    for (let x = 0; x < 40; x++) {
+      const p = (y * 40 + x) * 4;
+      if ((x < 39 && differ(p, p + 4)) || (y < 39 && differ(p, p + 160))) map[y * EDGE_ROW + x] = 1;
+    }
+  }
+  return map;
+}
+
+/**
+ * Design similarity: best intersection-over-union of two edge maps over the 9 shifts
+ * of up to 1px. Mirrors the SQL function edge_iou().
+ */
+export function edgeIoU(a: Uint8Array, b: Uint8Array): number {
+  let best = 0;
+  for (const shift of [0, 1, -1, EDGE_ROW, -EDGE_ROW, EDGE_ROW - 1, EDGE_ROW + 1, -EDGE_ROW + 1, -EDGE_ROW - 1]) {
+    let inter = 0, union = 0;
+    for (let i = 0; i < EDGE_BITS; i++) {
+      const j = i + shift;
+      const bv = j >= 0 && j < EDGE_BITS ? b[j] : 0;
+      if (a[i] && bv) inter++;
+      if (a[i] || bv) union++;
+    }
+    if (union && inter / union > best) best = inter / union;
+  }
+  return best;
+}
+
+export function edgeMapToBits(map: Uint8Array): string {
+  return map.join("");
+}
+
 export function hamming(a: bigint, b: bigint): number {
   let x = BigInt.asUintN(64, a ^ b);
   let c = 0;

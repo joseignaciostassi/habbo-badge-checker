@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { analyzeBadge } from "../src/core/analyze";
-import { exactMatch, perceptualDistance } from "../src/core/compare";
+import { exactMatch, isSimilar, perceptualDistance } from "../src/core/compare";
 import { cleanAlpha, normalize40, sizeNote } from "../src/core/normalize";
 import { blank, border, design, getPx, mapColors, paste, setPx, toGif, toPng } from "./helpers";
 
-const SIM = { dhash: 10, silhouette: 8 };
+const SIM = { dhash: 20, silhouette: 10, design: 0.8 };
 const RED = [220, 30, 40, 255] as const;
 const WHITE = [255, 255, 255, 255] as const;
 
@@ -78,18 +78,14 @@ describe("main detection cases", () => {
     const a = await analyzeBadge(await toPng(orig));
     const b = await analyzeBadge(await toPng(tinted));
     expect(exactMatch(a, b)).toBeNull();
-    const d = perceptualDistance(a, b)!;
-    expect(d.dhash).toBeLessThanOrEqual(SIM.dhash);
-    expect(d.silhouette).toBeLessThanOrEqual(SIM.silhouette);
+    expect(isSimilar(perceptualDistance(a, b)!, SIM)).toBe(true);
   });
 
   it("badge shifted by 1px is similar (and same content)", async () => {
     const a = await analyzeBadge(await toPng(paste(blank(40, 40), design(7), 2, 2)));
     const b = await analyzeBadge(await toPng(paste(blank(40, 40), design(7), 3, 2)));
     expect(exactMatch(a, b)).toBe("same-content");
-    const d = perceptualDistance(a, b)!;
-    expect(d.dhash).toBeLessThanOrEqual(SIM.dhash);
-    expect(d.silhouette).toBeLessThanOrEqual(SIM.silhouette);
+    expect(isSimilar(perceptualDistance(a, b)!, SIM)).toBe(true);
   });
 
   it("white border vs transparent border are NOT equal", async () => {
@@ -103,7 +99,23 @@ describe("main detection cases", () => {
     const a = await analyzeBadge(await toPng(badge40(9)));
     const b = await analyzeBadge(await toPng(badge40(10)));
     expect(exactMatch(a, b)).toBeNull();
-    expect(perceptualDistance(a, b)!.dhash).toBeGreaterThan(SIM.dhash);
+    expect(isSimilar(perceptualDistance(a, b)!, SIM)).toBe(false);
+  });
+
+  it("same silhouette but different design is NOT similar", async () => {
+    // Same round shape, different interior layout: the old hash-only false positive.
+    const a = await analyzeBadge(await toPng(paste(blank(40, 40), design(20, 36, 4), 2, 2)));
+    const b = await analyzeBadge(await toPng(paste(blank(40, 40), design(21, 36, 7), 2, 2)));
+    const d = perceptualDistance(a, b)!;
+    expect(d.silhouette).toBe(0);
+    expect(d.design).toBeLessThan(SIM.design);
+  });
+
+  it("same design in another color scheme is similar", async () => {
+    const orig = badge40(22);
+    const swapped = mapColors(orig, ([r, g, b, a]) => [g, b, r, a]);
+    const d = perceptualDistance(await analyzeBadge(await toPng(orig)), await analyzeBadge(await toPng(swapped)))!;
+    expect(d.design).toBeGreaterThan(0.95);
   });
 });
 
@@ -123,17 +135,17 @@ describe("animation", () => {
     expect(anim.uniqueFrames).toBe(2);
     const stat = await analyzeBadge(await toGif([f2]));
     expect(exactMatch(anim, stat)).toBe("identical");
-    expect(perceptualDistance(anim, stat)!.dhash).toBe(0);
+    expect(perceptualDistance(anim, stat)!.design).toBe(1);
   });
 
   it("animated badge with an empty frame: empty frame never matches", async () => {
     const empty = blank(40, 40);
     const a = await analyzeBadge(await toGif([badge40(14), empty]));
-    const b = await analyzeBadge(await toGif([badge40(15), empty]));
+    const b = await analyzeBadge(await toGif([paste(blank(40, 40), design(15, 36, 7), 2, 2), empty]));
     expect(a.animated).toBe(true);
     expect(a.frames.filter((f) => f.empty)).toHaveLength(1);
     expect(exactMatch(a, b)).toBeNull();
-    expect(perceptualDistance(a, b)!.dhash).toBeGreaterThan(SIM.dhash);
+    expect(isSimilar(perceptualDistance(a, b)!, SIM)).toBe(false);
     expect(exactMatch(a, await analyzeBadge(await toPng(badge40(14))))).toBe("identical");
   });
 });

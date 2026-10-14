@@ -12,6 +12,11 @@ function threshold(v: FormDataEntryValue | null, fallback: number) {
   return v !== null && Number.isInteger(n) && n >= 0 && n <= 64 ? n : fallback;
 }
 
+function designThreshold(v: FormDataEntryValue | null, fallback: number) {
+  const n = Number(v);
+  return v !== null && n >= 0 && n <= 1 ? n : fallback;
+}
+
 export async function POST(req: Request) {
   const form = await req.formData();
   const file = form.get("file");
@@ -21,6 +26,7 @@ export async function POST(req: Request) {
   const thresholds = {
     dhash: threshold(form.get("dhash"), config.thresholds.dhash),
     silhouette: threshold(form.get("sil"), config.thresholds.silhouette),
+    design: designThreshold(form.get("design"), config.thresholds.design),
   };
 
   try {

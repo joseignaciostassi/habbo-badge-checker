@@ -18,6 +18,8 @@ export interface FrameFingerprint {
   /** 64-bit fingerprints, as signed BIGINT-compatible values. */
   dhash: bigint;
   silhouette: bigint;
+  /** Color-boundary map (see edgeMap), used to verify design similarity. */
+  edges: Uint8Array;
   /** Fully transparent frame: excluded from exact and similarity matching. */
   empty: boolean;
 }

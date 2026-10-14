@@ -31,22 +31,22 @@ export function getPx(img: RgbaImage, x: number, y: number): Rgba {
 }
 
 /**
- * A badge-like design: a rounded shape of random 4x4 color blocks from a small
+ * A badge-like design: a rounded shape of random block x block color blocks from a small
  * palette (GIF-safe), transparent around it. `size` is the design's square size.
  */
-export function design(seed: number, size = 36): RgbaImage {
+export function design(seed: number, size = 36, block = 4): RgbaImage {
   const r = rng(seed);
   const palette: Rgba[] = Array.from({ length: 5 }, () => [
     Math.floor(r() * 256), Math.floor(r() * 256), Math.floor(r() * 256), 255,
   ]);
   const img = blank(size, size);
-  const blocks = Math.ceil(size / 4);
+  const blocks = Math.ceil(size / block);
   const grid = Array.from({ length: blocks * blocks }, () => palette[Math.floor(r() * palette.length)]);
   const c = (size - 1) / 2;
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       if (Math.hypot(x - c, y - c) > size / 2) continue;
-      setPx(img, x, y, grid[Math.floor(y / 4) * blocks + Math.floor(x / 4)]);
+      setPx(img, x, y, grid[Math.floor(y / block) * blocks + Math.floor(x / block)]);
     }
   }
   return img;

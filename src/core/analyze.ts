@@ -2,7 +2,10 @@ import { createHash } from "node:crypto";
 import { decodeBadge } from "./decode";
 import { exactHashes } from "./exactHashes";
 import { cleanAlpha, isEmpty, normalize40, sizeNote } from "./normalize";
-import { dHash, silhouetteHash } from "./perceptual";
+import { dHash, edgeMap, silhouetteHash } from "./perceptual";
+
+/** Bump when fingerprints change: the indexer reprocesses badges with an older version. */
+export const ANALYSIS_VERSION = 2;
 import type { BadgeAnalysis, ExactHash, FrameFingerprint, RgbaImage } from "./types";
 
 /** Drops repeated frames (identical pixels after alpha cleaning). */
@@ -30,7 +33,7 @@ export async function analyzeBadge(input: Buffer): Promise<BadgeAnalysis> {
     const n = normalize40(frame);
     normalized.push(n);
     const empty = isEmpty(frame);
-    fingerprints.push({ frameIdx: idx, dhash: dHash(n), silhouette: silhouetteHash(n), empty });
+    fingerprints.push({ frameIdx: idx, dhash: dHash(n), silhouette: silhouetteHash(n), edges: edgeMap(n), empty });
     // Empty frames would match every other empty frame: no exact hashes for them.
     if (!empty) hashes.push(...exactHashes(frame, idx, n));
   });

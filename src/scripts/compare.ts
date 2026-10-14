@@ -12,6 +12,7 @@ const { values: args, positionals } = parseArgs({
   options: {
     dhash: { type: "string" },
     sil: { type: "string" },
+    design: { type: "string" },
     limit: { type: "string", default: "30" },
   },
 });
@@ -26,6 +27,7 @@ async function main() {
   const thresholds = {
     dhash: args.dhash ? Number(args.dhash) : config.thresholds.dhash,
     silhouette: args.sil ? Number(args.sil) : config.thresholds.silhouette,
+    design: args.design ? Number(args.design) : config.thresholds.design,
   };
   const limit = Number(args.limit);
 
@@ -42,9 +44,15 @@ async function main() {
     console.log(`  ${e.fileName.padEnd(28)} ${`${e.width}x${e.height}`.padEnd(7)} ${MATCH_LABELS[e.match]}`);
   }
 
-  console.log(`\nSimilares (dHash ≤ ${thresholds.dhash}, silueta ≤ ${thresholds.silhouette}): ${similar.length}${similar.length >= limit ? "+" : ""}`);
+  console.log(
+    `\nSimilares (diseño ≥ ${Math.round(thresholds.design * 100)}%, prefiltro dHash ≤ ${thresholds.dhash}, silueta ≤ ${thresholds.silhouette}): ` +
+      `${similar.length}${similar.length >= limit ? "+" : ""}`,
+  );
   for (const s of similar) {
-    console.log(`  ${s.fileName.padEnd(28)} ${`${s.width}x${s.height}`.padEnd(7)} dHash ${String(s.dhash).padStart(2)}  silueta ${String(s.silhouette).padStart(2)}`);
+    console.log(
+      `  ${s.fileName.padEnd(28)} ${`${s.width}x${s.height}`.padEnd(7)} diseño ${String(Math.round(s.design * 100)).padStart(3)}%` +
+        `  dHash ${String(s.dhash).padStart(2)}  silueta ${String(s.silhouette).padStart(2)}`,
+    );
   }
 }
 

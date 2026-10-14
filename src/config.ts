@@ -12,8 +12,11 @@ export const config = {
     return required("BADGES_DIR");
   },
   thresholds: {
-    dhash: Number(process.env.SIM_DHASH_MAX ?? 10),
-    silhouette: Number(process.env.SIM_SILHOUETTE_MAX ?? 8),
+    /** Max Hamming distances (0-64): coarse prefilter. */
+    dhash: Number(process.env.SIM_DHASH_MAX ?? 20),
+    silhouette: Number(process.env.SIM_SILHOUETTE_MAX ?? 10),
+    /** Min design similarity (edge map IoU, 0-1): the actual verification. */
+    design: Number(process.env.SIM_DESIGN_MIN ?? 0.8),
   },
 };
 

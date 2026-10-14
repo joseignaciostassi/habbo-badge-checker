@@ -15,12 +15,13 @@ interface BadgeInfo {
 interface CheckResponse {
   upload: { format: string; width: number; height: number; uniqueFrames: number; animated: boolean; sizeNote: string | null };
   exact: (BadgeInfo & { match: ExactMatch })[];
-  similar: (BadgeInfo & { dhash: number; silhouette: number })[];
+  similar: (BadgeInfo & { dhash: number; silhouette: number; design: number })[];
 }
 
 interface Thresholds {
   dhash: number;
   silhouette: number;
+  design: number;
 }
 
 export function Checker({ defaults }: { defaults: Thresholds }) {
@@ -60,6 +61,7 @@ export function Checker({ defaults }: { defaults: Thresholds }) {
       body.set("file", file);
       body.set("dhash", String(thresholds.dhash));
       body.set("sil", String(thresholds.silhouette));
+      body.set("design", String(thresholds.design));
       try {
         const res = await fetch("/api/check", { method: "POST", body, signal: ctrl.signal });
         const json = await res.json();
@@ -143,15 +145,28 @@ export function Checker({ defaults }: { defaults: Thresholds }) {
           </h2>
           <div className="controls">
             <Slider
-              label="dHash ≤"
-              value={thresholds.dhash}
-              onChange={(dhash) => setThresholds((t) => ({ ...t, dhash }))}
+              label="Diseño ≥"
+              min={30}
+              max={100}
+              value={Math.round(thresholds.design * 100)}
+              suffix="%"
+              onChange={(v) => setThresholds((t) => ({ ...t, design: v / 100 }))}
             />
-            <Slider
-              label="Silueta ≤"
-              value={thresholds.silhouette}
-              onChange={(silhouette) => setThresholds((t) => ({ ...t, silhouette }))}
-            />
+            <details>
+              <summary>Prefiltro</summary>
+              <div className="controls">
+                <Slider
+                  label="dHash ≤"
+                  value={thresholds.dhash}
+                  onChange={(dhash) => setThresholds((t) => ({ ...t, dhash }))}
+                />
+                <Slider
+                  label="Silueta ≤"
+                  value={thresholds.silhouette}
+                  onChange={(silhouette) => setThresholds((t) => ({ ...t, silhouette }))}
+                />
+              </div>
+            </details>
             <button type="button" onClick={() => setThresholds(defaults)}>
               Restablecer
             </button>
@@ -162,7 +177,8 @@ export function Checker({ defaults }: { defaults: Thresholds }) {
             <div className="grid">
               {result.similar.map((m) => (
                 <MatchCard key={m.id} badge={m} preview={preview} up={up}>
-                  <span className="tag similar">
+                  <span className="tag similar">Diseño {Math.round(m.design * 100)}%</span>
+                  <span className="meta">
                     dHash {m.dhash} · silueta {m.silhouette}
                   </span>
                 </MatchCard>
@@ -204,12 +220,29 @@ function MatchCard({
   );
 }
 
-function Slider({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+function Slider({
+  label,
+  value,
+  onChange,
+  min = 0,
+  max = 32,
+  suffix = "",
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+  min?: number;
+  max?: number;
+  suffix?: string;
+}) {
   return (
     <label>
       {label}
-      <input type="range" min={0} max={32} value={value} onChange={(e) => onChange(Number(e.target.value))} />
-      <output>{value}</output>
+      <input type="range" min={min} max={max} value={value} onChange={(e) => onChange(Number(e.target.value))} />
+      <output>
+        {value}
+        {suffix}
+      </output>
     </label>
   );
 }

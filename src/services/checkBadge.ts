@@ -1,6 +1,6 @@
 import type { Thresholds } from "../config";
 import { analyzeBadge } from "../core/analyze";
-import { type ExactMatch, hashGroup } from "../core/compare";
+import { type ExactMatch, MATCH_PRIORITY, strongestMatch } from "../core/compare";
 import type { BadgeAnalysis } from "../core/types";
 import type { BadgeInfo, BadgeRepository, SimilarHit } from "../data/badgeRepo";
 
@@ -14,8 +14,6 @@ export interface CheckResult {
   /** Similar badges, excluding those already reported as exact. */
   similar: SimilarHit[];
 }
-
-const PRIORITY: ExactMatch[] = ["identical", "identical-crop", "same-content"];
 
 /** Checks an image against the index: exact duplicates and similar badges, always both. */
 export async function checkBadge(
@@ -33,11 +31,11 @@ export async function checkBadge(
   ]);
 
   const exact = exactHits
-    .map(({ kinds, ...info }) => {
-      const groups = new Set(kinds.map(hashGroup));
-      return { ...info, match: PRIORITY.find((p) => groups.has(p))! };
-    })
-    .sort((a, b) => PRIORITY.indexOf(a.match) - PRIORITY.indexOf(b.match) || a.fileName.localeCompare(b.fileName));
+    .map(({ kinds, ...info }) => ({ ...info, match: strongestMatch(kinds) }))
+    .sort(
+      (a, b) =>
+        MATCH_PRIORITY.indexOf(a.match) - MATCH_PRIORITY.indexOf(b.match) || a.fileName.localeCompare(b.fileName),
+    );
 
   const exactIds = new Set(exact.map((e) => e.id));
   return { analysis, exact, similar: similar.filter((s) => !exactIds.has(s.id)) };
