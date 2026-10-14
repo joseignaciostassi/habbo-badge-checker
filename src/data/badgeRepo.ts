@@ -1,5 +1,6 @@
 import type pg from "pg";
-import type { BadgeAnalysis } from "../core/types";
+import type { Thresholds } from "../config";
+import type { BadgeAnalysis, ExactKind } from "../core/types";
 import { getPool } from "./db";
 
 export interface IndexedFile {
@@ -22,11 +23,44 @@ export interface IndexSummary {
   errors: { fileName: string; error: string }[];
 }
 
+export interface BadgeInfo {
+  id: number;
+  fileName: string;
+  width: number;
+  height: number;
+  animated: boolean;
+}
+
+export interface ExactHit extends BadgeInfo {
+  /** Kinds of the stored hashes that matched. */
+  kinds: ExactKind[];
+}
+
+export interface SimilarHit extends BadgeInfo {
+  dhash: number;
+  silhouette: number;
+}
+
 export interface BadgeRepository {
   indexedFiles(): Promise<Map<string, IndexedFile>>;
   saveBadges(batch: BadgeToSave[]): Promise<void>;
   recordError(fileName: string, error: string): Promise<void>;
   summary(): Promise<IndexSummary>;
+  findExact(hashes: Buffer[]): Promise<ExactHit[]>;
+  findSimilar(frames: { dhash: bigint; silhouette: bigint }[], t: Thresholds, limit: number): Promise<SimilarHit[]>;
+  getBadge(id: number): Promise<BadgeInfo | null>;
+}
+
+const BADGE_COLS = "b.id, b.file_name, b.orig_width, b.orig_height, b.animated";
+
+function toInfo(r: Record<string, unknown>): BadgeInfo {
+  return {
+    id: r.id as number,
+    fileName: r.file_name as string,
+    width: r.orig_width as number,
+    height: r.orig_height as number,
+    animated: r.animated as boolean,
+  };
 }
 
 export class PgBadgeRepository implements BadgeRepository {
@@ -93,6 +127,49 @@ export class PgBadgeRepository implements BadgeRepository {
        ON CONFLICT (file_name) DO UPDATE SET error = EXCLUDED.error, at = now()`,
       [fileName, error],
     );
+  }
+
+  async findExact(hashes: Buffer[]): Promise<ExactHit[]> {
+    if (!hashes.length) return [];
+    const { rows } = await this.pool.query(
+      `SELECT ${BADGE_COLS}, array_agg(DISTINCT h.kind) AS kinds
+       FROM badge_exact_hashes h JOIN badges b ON b.id = h.badge_id
+       WHERE h.hash = ANY($1::bytea[])
+       GROUP BY b.id ORDER BY b.file_name`,
+      [hashes],
+    );
+    return rows.map((r) => ({ ...toInfo(r), kinds: r.kinds }));
+  }
+
+  /** Best (smallest dhash+silhouette) frame pair per badge, within both thresholds. */
+  async findSimilar(frames: { dhash: bigint; silhouette: bigint }[], t: Thresholds, limit: number): Promise<SimilarHit[]> {
+    if (!frames.length) return [];
+    const { rows } = await this.pool.query(
+      `WITH q AS (SELECT * FROM unnest($1::bigint[], $2::bigint[]) AS q(dhash, silhouette)),
+       d AS (
+         SELECT f.badge_id,
+                bit_count((f.dhash # q.dhash)::bit(64))::int AS d1,
+                bit_count((f.silhouette # q.silhouette)::bit(64))::int AS d2
+         FROM badge_frames f CROSS JOIN q
+         WHERE NOT f.empty
+       ),
+       best AS (
+         SELECT DISTINCT ON (badge_id) badge_id, d1, d2 FROM d
+         WHERE d1 <= $3 AND d2 <= $4
+         ORDER BY badge_id, d1 + d2, d1
+       )
+       SELECT ${BADGE_COLS}, best.d1, best.d2
+       FROM best JOIN badges b ON b.id = best.badge_id
+       ORDER BY best.d1 + best.d2, best.d1, b.file_name
+       LIMIT $5`,
+      [frames.map((f) => f.dhash.toString()), frames.map((f) => f.silhouette.toString()), t.dhash, t.silhouette, limit],
+    );
+    return rows.map((r) => ({ ...toInfo(r), dhash: r.d1, silhouette: r.d2 }));
+  }
+
+  async getBadge(id: number): Promise<BadgeInfo | null> {
+    const { rows } = await this.pool.query(`SELECT ${BADGE_COLS} FROM badges b WHERE b.id = $1`, [id]);
+    return rows[0] ? toInfo(rows[0]) : null;
   }
 
   async summary(): Promise<IndexSummary> {
