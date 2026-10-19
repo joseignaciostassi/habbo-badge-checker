@@ -11,7 +11,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const badge = await new PgBadgeRepository().getBadge(id);
   if (!badge) return new Response("Not found", { status: 404 });
 
-  const data = await getImageStore().read(badge.fileName);
+  let data: Buffer;
+  try {
+    data = await getImageStore().read(badge.fileName);
+  } catch {
+    return new Response("Badge file not found", { status: 404 }); // file left the folder
+  }
   const type = data.subarray(0, 4).toString("hex") === "89504e47" ? "image/png" : "image/gif";
   return new Response(new Uint8Array(data), {
     headers: { "Content-Type": type, "Cache-Control": "public, max-age=3600" },

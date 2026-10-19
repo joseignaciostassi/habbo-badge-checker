@@ -110,12 +110,14 @@ export class CalibrationRepository {
       `WITH counts AS (
          SELECT p.stratum, count(l.pair_id) AS labeled
          FROM calibration_pairs p LEFT JOIN calibration_labels l ON l.pair_id = p.id
+         WHERE NOT EXISTS (SELECT 1 FROM badges b WHERE b.id IN (p.a, p.b) AND b.missing_at IS NOT NULL)
          GROUP BY p.stratum
          HAVING count(*) > count(l.pair_id)
        ),
        target AS (SELECT stratum FROM counts ORDER BY labeled, random() LIMIT 1)
        ${pairSelect()}
        WHERE p.stratum = (SELECT stratum FROM target)
+         AND ba.missing_at IS NULL AND bb.missing_at IS NULL
          AND NOT EXISTS (SELECT 1 FROM calibration_labels l WHERE l.pair_id = p.id)
        ORDER BY random() LIMIT 1`,
     );
@@ -144,6 +146,7 @@ export class CalibrationRepository {
               count(p.id)::int AS sampled
        FROM calibration_strata s
        LEFT JOIN calibration_pairs p ON p.stratum = s.stratum
+         AND NOT EXISTS (SELECT 1 FROM badges b WHERE b.id IN (p.a, p.b) AND b.missing_at IS NOT NULL)
        LEFT JOIN calibration_labels l ON l.pair_id = p.id
        GROUP BY s.stratum ORDER BY s.stratum`,
     );
@@ -164,7 +167,7 @@ export class CalibrationRepository {
   }
 
   async badgeCount(): Promise<number> {
-    const { rows } = await this.pool.query("SELECT count(*)::int AS n FROM badges");
+    const { rows } = await this.pool.query("SELECT count(*)::int AS n FROM badges WHERE missing_at IS NULL");
     return rows[0].n;
   }
 }

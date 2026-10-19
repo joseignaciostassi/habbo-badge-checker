@@ -5,7 +5,7 @@ import { config } from "../config";
 const g = globalThis as { __badgePool?: pg.Pool };
 
 export function getPool(): pg.Pool {
-  g.__badgePool ??= new pg.Pool({ connectionString: config.databaseUrl, max: 5 });
+  g.__badgePool ??= new pg.Pool({ connectionString: config.databaseUrl, max: 8 });
   return g.__badgePool;
 }
 

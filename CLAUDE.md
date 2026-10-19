@@ -15,7 +15,7 @@ npx vitest run tests/core.test.ts -t "empty frame"   # single file / single test
 npm run typecheck           # tsc --noEmit
 npm run db:create           # create the DB named in DATABASE_URL if missing
 npm run migrate             # apply new files in src/data/migrations/ (tracked in schema_migrations)
-npm run index [-- --limit 200]   # incremental indexer over BADGES_DIR
+npm run index [-- --limit 200 --allow-mass-missing]   # incremental indexer over BADGES_DIR
 npm run compare -- <image> [--dhash N --sil N --design 0.575 --limit N]
 npm run scan [-- --design 0.725]  # full-base duplicate/similar scan, stored in scan_* tables
 npm run calibrate [-- --sample --per 12 --synthetic 300]  # threshold calibration report (--sample tops up each stratum to N pairs)
@@ -23,7 +23,7 @@ npm run calibrate [-- --sample --per 12 --synthetic 300]  # threshold calibratio
 
 Config lives in `.env` (see `.env.example`): `DATABASE_URL`, `BADGES_DIR`, `SIM_DHASH_MAX`, `SIM_SILHOUETTE_MAX`, `SIM_DESIGN_MIN` (web check), `SIM_SCAN_DESIGN_MIN` (scan). Scripts load it via `dotenv/config`; Next loads it itself.
 
-Nothing runs automatically: starting the app does not index, migrate or scan. New badges in the folder need `npm run index`, then `npm run scan` to show up in `/scan`.
+Nothing runs automatically: starting the app does not index, migrate or scan. Every page shows `SyncBanner` (`app/SyncBanner.tsx`), which asks `GET /api/sync` whether the folder differs from the index or the scan is older than the last change; its "Actualizar BD" button (`POST /api/sync`) runs the same index + scan as the CLI in the background (`src/services/sync.ts`, job state on `globalThis`). The CLI `index`/`scan` and the web update share a PG advisory lock (`src/data/updateLock.ts`), so only one runs at a time.
 
 ## Architecture
 
@@ -32,8 +32,8 @@ Layers (the web and the scripts share everything below `app/`):
 - `src/core/` — pure image logic, no I/O. `analyzeBadge(buffer)` in `analyze.ts` is the single entry point used by the indexer, the CLI and the web API.
 - `src/data/` — PostgreSQL via plain `pg` and SQL (no ORM). `badgeRepo.ts` (index + lookups), `scanRepo.ts`, `calibrationRepo.ts`. Pool cached on `globalThis` for Next dev HMR.
 - `src/storage/` — `ImageStore` interface; `LocalFsStore` reads `BADGES_DIR` read-only. A Supabase Storage implementation is meant to slot in here for the Vercel deploy.
-- `src/services/checkBadge.ts` — analyze + exact lookup + similar lookup; used by `/api/check` and `npm run compare`.
-- `src/scripts/` — CLI entry points (run with `tsx`).
+- `src/services/` — `checkBadge.ts` (analyze + exact + similar lookup; `/api/check` and `npm run compare`), `indexBadges.ts` / `scanBadges.ts` (index and scan logic shared by the CLI and the web update), `sync.ts` (change status and the "Actualizar BD" job).
+- `src/scripts/` — thin CLI entry points over the services (run with `tsx`).
 
 ### Analysis pipeline (`src/core`)
 
@@ -52,6 +52,7 @@ hash prefilter (`dhash ≤ SIM_DHASH_MAX AND silhouette ≤ SIM_SILHOUETTE_MAX`)
 - `edgeIoU()` in `src/core/perceptual.ts` mirrors the SQL function `edge_iou()` (latest definition in migration `006_oriented_edges.sql`): same layout and the same 9 shifts (`0, ±1, ±40, ±41, ±42`). Changing one requires changing the other.
 - Any change to fingerprints/hashes must bump `ANALYSIS_VERSION` in `src/core/analyze.ts`; the indexer reprocesses badges whose stored `analysis_version` is lower (otherwise it only processes new or changed files by size+mtime).
 - Migrations are append-only numbered SQL files; never edit an applied one.
+- Badges whose file left the folder are soft-deleted (`badges.missing_at`): the row stays (scan/calibration references, labels) but its hashes and frames are deleted, so lookups and scans skip it without extra filters; queries that read `badges` directly must filter `missing_at IS NULL`. `folderDiff()` (`src/core/folderDiff.ts`) decides what is new/changed/outdated/restored/missing for both the indexer and the web; it refuses to mark more than 5% missing at once unless forced. The file name is the badge's identity: renames are a delete plus a new badge, never merged.
 - Never write to `BADGES_DIR` or copy badges into the repo (`.gitignore` excludes `*.gif`/`*.png`).
 
 ### Scan and calibration

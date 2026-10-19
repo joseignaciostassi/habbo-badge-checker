@@ -1,15 +1,12 @@
 import type pg from "pg";
 import type { Thresholds } from "../config";
 import { ANALYSIS_VERSION } from "../core/analyze";
+import type { IndexedFile } from "../core/folderDiff";
 import { EDGE_BITS, edgeMapToBits } from "../core/perceptual";
 import type { BadgeAnalysis, ExactKind, FrameFingerprint } from "../core/types";
 import { getPool } from "./db";
 
-export interface IndexedFile {
-  size: number;
-  mtime: Date;
-  version: number;
-}
+export type { IndexedFile };
 
 export interface BadgeToSave {
   fileName: string;
@@ -19,7 +16,10 @@ export interface BadgeToSave {
 }
 
 export interface IndexSummary {
+  /** Active badges (in the folder). */
   total: number;
+  /** Indexed badges whose file left the folder. */
+  missing: number;
   bySize: { size: string; count: number }[];
   animated: { fileName: string; frames: number }[];
   rareSizes: { fileName: string; size: string; note: string }[];
@@ -48,7 +48,9 @@ export interface SimilarHit extends BadgeInfo {
 
 export interface BadgeRepository {
   indexedFiles(): Promise<Map<string, IndexedFile>>;
+  indexErrors(): Promise<Map<string, Date>>;
   saveBadges(batch: BadgeToSave[]): Promise<void>;
+  markMissing(fileNames: string[]): Promise<void>;
   recordError(fileName: string, error: string): Promise<void>;
   summary(): Promise<IndexSummary>;
   findExact(hashes: Buffer[]): Promise<ExactHit[]>;
@@ -72,8 +74,16 @@ export class PgBadgeRepository implements BadgeRepository {
   constructor(private readonly pool: pg.Pool = getPool()) {}
 
   async indexedFiles(): Promise<Map<string, IndexedFile>> {
-    const { rows } = await this.pool.query("SELECT file_name, file_size, file_mtime, analysis_version FROM badges");
-    return new Map(rows.map((r) => [r.file_name, { size: r.file_size, mtime: r.file_mtime, version: r.analysis_version }]));
+    const { rows } = await this.pool.query("SELECT file_name, file_size, file_mtime, analysis_version, missing_at FROM badges");
+    return new Map(
+      rows.map((r) => [r.file_name, { size: r.file_size, mtime: r.file_mtime, version: r.analysis_version, missingAt: r.missing_at }]),
+    );
+  }
+
+  /** When each file last failed to index. */
+  async indexErrors(): Promise<Map<string, Date>> {
+    const { rows } = await this.pool.query("SELECT file_name, at FROM index_errors");
+    return new Map(rows.map((r) => [r.file_name, r.at]));
   }
 
   /** Upserts a batch in one transaction, replacing any previous hashes/frames. */
@@ -92,7 +102,8 @@ export class PgBadgeRepository implements BadgeRepository {
              file_size=EXCLUDED.file_size, file_mtime=EXCLUDED.file_mtime, format=EXCLUDED.format,
              orig_width=EXCLUDED.orig_width, orig_height=EXCLUDED.orig_height,
              unique_frames=EXCLUDED.unique_frames, animated=EXCLUDED.animated,
-             size_note=EXCLUDED.size_note, analysis_version=EXCLUDED.analysis_version, indexed_at=now()
+             size_note=EXCLUDED.size_note, analysis_version=EXCLUDED.analysis_version, indexed_at=now(),
+             missing_at=NULL
            RETURNING id`,
           [b.fileName, b.size, b.mtime, a.format, a.width, a.height, a.uniqueFrames, a.animated, a.sizeNote, ANALYSIS_VERSION],
         );
@@ -119,6 +130,31 @@ export class PgBadgeRepository implements BadgeRepository {
         );
       }
       await client.query("DELETE FROM index_errors WHERE file_name = ANY($1)", [batch.map((b) => b.fileName)]);
+      await client.query("COMMIT");
+    } catch (e) {
+      await client.query("ROLLBACK");
+      throw e;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Soft delete: keeps the badge row (and what references it) but drops its hashes and frames,
+   * so lookups and scans no longer match it.
+   */
+  async markMissing(fileNames: string[]): Promise<void> {
+    if (!fileNames.length) return;
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const { rows } = await client.query(
+        "UPDATE badges SET missing_at = now() WHERE file_name = ANY($1) AND missing_at IS NULL RETURNING id",
+        [fileNames],
+      );
+      const ids = rows.map((r) => r.id);
+      await client.query("DELETE FROM badge_exact_hashes WHERE badge_id = ANY($1)", [ids]);
+      await client.query("DELETE FROM badge_frames WHERE badge_id = ANY($1)", [ids]);
       await client.query("COMMIT");
     } catch (e) {
       await client.query("ROLLBACK");
@@ -198,20 +234,23 @@ export class PgBadgeRepository implements BadgeRepository {
 
   async summary(): Promise<IndexSummary> {
     const [total, bySize, animated, rare, errors] = await Promise.all([
-      this.pool.query("SELECT count(*)::int AS n FROM badges"),
+      this.pool.query(
+        "SELECT count(*) FILTER (WHERE missing_at IS NULL)::int AS n, count(missing_at)::int AS missing FROM badges",
+      ),
       this.pool.query(
         `SELECT orig_width || 'x' || orig_height AS size, count(*)::int AS count
-         FROM badges GROUP BY 1 ORDER BY 2 DESC`,
+         FROM badges WHERE missing_at IS NULL GROUP BY 1 ORDER BY 2 DESC`,
       ),
-      this.pool.query("SELECT file_name, unique_frames FROM badges WHERE animated ORDER BY file_name"),
+      this.pool.query("SELECT file_name, unique_frames FROM badges WHERE animated AND missing_at IS NULL ORDER BY file_name"),
       this.pool.query(
         `SELECT file_name, orig_width || 'x' || orig_height AS size, size_note
-         FROM badges WHERE size_note IS NOT NULL ORDER BY orig_width, orig_height, file_name`,
+         FROM badges WHERE size_note IS NOT NULL AND missing_at IS NULL ORDER BY orig_width, orig_height, file_name`,
       ),
       this.pool.query("SELECT file_name, error FROM index_errors ORDER BY file_name"),
     ]);
     return {
       total: total.rows[0].n,
+      missing: total.rows[0].missing,
       bySize: bySize.rows,
       animated: animated.rows.map((r) => ({ fileName: r.file_name, frames: r.unique_frames })),
       rareSizes: rare.rows.map((r) => ({ fileName: r.file_name, size: r.size, note: r.size_note })),

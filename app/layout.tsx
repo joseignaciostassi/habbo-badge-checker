@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import "./globals.css";
+import { SyncBanner } from "./SyncBanner";
 
 export const metadata: Metadata = {
   title: "Badge Checker",
@@ -19,7 +20,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Link href="/calibrate">Calibración</Link>
           </nav>
         </header>
-        <main>{children}</main>
+        <main>
+          <SyncBanner />
+          {children}
+        </main>
       </body>
     </html>
   );

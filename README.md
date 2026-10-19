@@ -46,11 +46,15 @@ Después abrí `http://localhost:3000`.
 ### Desarrollo y calidad
 
 #### `npm run dev`
-Levanta la web en modo desarrollo en `http://localhost:3000`, con recarga automática al editar código. Solo inicia el servidor: **no** indexa, no migra ni escanea. Las páginas son:
+Levanta la web en modo desarrollo en `http://localhost:3000`, con recarga automática al editar código. Al iniciar no indexa, no migra ni escanea. Las páginas son:
 
 - `/` — **Verificar:** subís una placa (arrastrando, con clic o pegándola con Ctrl+V) y muestra los duplicados exactos y las similares, cada una ampliada en pixel-art al lado de la tuya. El slider de diseño ajusta el umbral en vivo; dHash y silueta están en "Prefiltro".
 - `/scan` — **Escaneo:** los grupos de duplicados y de similares que ya existen en la base, según el último `npm run scan`.
 - `/calibrate` — **Calibración:** etiquetado de pares para calibrar los umbrales.
+
+**Aviso de cambios y botón "Actualizar BD".** En todas las páginas, la web compara la carpeta de placas con la base al cargar y cada vez que volvés a la pestaña. Si hay placas nuevas, modificadas, eliminadas o restauradas, o si el escaneo es anterior a los últimos cambios, muestra un aviso con los conteos ("Ver placas" lista los nombres) y un botón **Actualizar BD**. El botón hace en segundo plano lo mismo que `npm run index` y, si hace falta, `npm run scan`, mostrando el progreso. Al terminar, `/scan` se actualiza solo. Si no hay cambios, no se muestra nada.
+
+Revisar la carpeta tarda unos 2–3 s con 27.000 placas, pero no frena la página: el aviso aparece cuando termina.
 
 #### `npm run build` / `npm run start`
 Compila la app para producción y la sirve. Es lo mismo que `dev` pero optimizado y sin recarga automática.
@@ -81,7 +85,7 @@ Verifica los tipos de TypeScript de todo el proyecto (`tsc --noEmit`) sin genera
 Crea la base indicada en `DATABASE_URL` si no existe. Para eso se conecta a la base `postgres` del servidor con el mismo usuario. Si la base ya existe, no hace nada.
 
 #### `npm run migrate`
-Aplica los archivos nuevos de `src/data/migrations/` en orden, cada uno en una transacción, y los registra en `schema_migrations`. Los ya aplicados se saltean, así que se puede correr siempre. Hoy hay 7 migraciones, todas aplicadas:
+Aplica los archivos nuevos de `src/data/migrations/` en orden, cada uno en una transacción, y los registra en `schema_migrations`. Los ya aplicados se saltean, así que se puede correr siempre. Hoy hay 8 migraciones, todas aplicadas:
 
 | Migración | Qué crea |
 |---|---|
@@ -90,6 +94,7 @@ Aplica los archivos nuevos de `src/data/migrations/` en orden, cada uno en una t
 | `003_scan`, `004_scan_group_position` | Resultados del escaneo. |
 | `005_calibration`, `007_calibration_restratify` | Calibración. |
 | `006_oriented_edges` | Bordes orientados, el score actual. |
+| `008_missing_badges` | Marca de placas eliminadas de la carpeta (borrado suave). |
 
 ### Indexado
 
@@ -101,7 +106,13 @@ Recorre `BADGES_DIR` y guarda en la base, por cada placa:
 - Hashes exactos.
 - Huellas por frame: dHash, silueta y mapa de bordes.
 
-Es **incremental**: solo procesa las placas nuevas, las modificadas (cambió el tamaño o la fecha del archivo) y las que fueron indexadas con una versión anterior del análisis. Sobre la base completa tarda unos 70 s; si no hay nada nuevo, unos segundos.
+Es **incremental**: solo procesa las placas nuevas, las modificadas (cambió el tamaño o la fecha del archivo), las restauradas y las que fueron indexadas con una versión anterior del análisis. Sobre la base completa tarda unos 70 s; si no hay nada nuevo, unos segundos. Es lo mismo que hace el botón **Actualizar BD** de la web.
+
+**Placas eliminadas de la carpeta (borrado suave).** No se borran de la base: se marcan como eliminadas y se les quitan los hashes y las huellas, así que dejan de aparecer en la verificación, en `compare` y en el escaneo. Conservan su registro y sus etiquetas de calibración, y si el archivo vuelve a la carpeta se reindexan solas.
+
+**Freno de seguridad.** Si de una vez falta más del 5% de las placas (por ejemplo, porque `BADGES_DIR` apunta a otra carpeta o a un disco desconectado), no se marca ninguna: el indexador avisa y la web muestra un aviso con el botón "Marcar igual como eliminadas". Desde la terminal se fuerza con `--allow-mass-missing`.
+
+El código de la placa (nombre del archivo) es su identidad: si renombrás una placa, la vieja queda como eliminada y la nueva se indexa aparte. Si dos placas con distinto código tienen el mismo contenido, se informan como duplicado exacto.
 
 Muestra el progreso y, al terminar, un resumen:
 
@@ -109,9 +120,9 @@ Muestra el progreso y, al terminar, un resumen:
 - Placas animadas con su listado.
 - Tamaños fuera de 40x40/42x42.
 - Archivos con error.
-- Placas indexadas que ya no están en la carpeta. Se informan pero **no se borran** de la base.
+- Placas eliminadas de la carpeta.
 
-Los archivos ilegibles se registran sin cortar la ejecución y se reintentan en cada corrida. Los listados completos quedan en `reports/` (`rare-sizes.csv`, `animated.csv`, `errors.csv`).
+Los archivos ilegibles se registran sin cortar la ejecución y se reintentan cuando el archivo cambia. Los listados completos quedan en `reports/` (`rare-sizes.csv`, `animated.csv`, `errors.csv`).
 
 Opciones:
 
@@ -121,7 +132,9 @@ Opciones:
 npm run index -- --limit 200
 ```
 
-> Agregar una placa a la carpeta no la indexa sola: hay que correr `npm run index`, y después `npm run scan` para que aparezca en `/scan`.
+- `--allow-mass-missing`: marca las placas eliminadas aunque se active el freno de seguridad.
+
+> `npm run index`, `npm run scan` y el botón **Actualizar BD** no pueden correr a la vez: si ya hay una actualización en curso, el segundo avisa y no hace nada.
 
 ### Comparación y escaneo
 
@@ -209,7 +222,7 @@ npm run calibrate -- --sample --per 20
 
 ### Limitaciones conocidas
 
-- La base no se actualiza sola: hay que correr `npm run index` (y `npm run scan`) al agregar placas.
+- La base no se actualiza sola: la web avisa de los cambios en la carpeta, pero hay que tocar **Actualizar BD** (o correr `npm run index` y `npm run scan`).
 - Placas de la **misma plantilla con distinto ícono o número**, como los `ACH_*` con números romanos, suelen quedar por debajo del umbral, porque el score compara el dibujo completo.
 - Las placas de más de 42px usan solo el recorte centrado; se listan en `reports/rare-sizes.csv` para revisarlas.
 

@@ -89,7 +89,7 @@ async function sample(per: number) {
 async function syntheticRecall(n: number) {
   const store = getImageStore();
   const { rows } = await getPool().query(
-    "SELECT file_name FROM badges WHERE NOT animated ORDER BY md5(file_name) LIMIT $1",
+    "SELECT file_name FROM badges WHERE NOT animated AND missing_at IS NULL ORDER BY md5(file_name) LIMIT $1",
     [n],
   );
   const variants = syntheticVariants(rng(42));

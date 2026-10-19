@@ -34,7 +34,7 @@ export class ScanRepository {
   constructor(private readonly pool: pg.Pool = getPool()) {}
 
   async badgeIdRange(): Promise<{ min: number; max: number }> {
-    const { rows } = await this.pool.query("SELECT min(id) AS min, max(id) AS max FROM badges");
+    const { rows } = await this.pool.query("SELECT min(id) AS min, max(id) AS max FROM badges WHERE missing_at IS NULL");
     return rows[0];
   }
 
@@ -120,6 +120,16 @@ export class ScanRepository {
     } finally {
       client.release();
     }
+  }
+
+  /** When the last scan started, and whether any badge was indexed or marked missing after that. */
+  async freshness(): Promise<{ scannedAt: Date | null; stale: boolean }> {
+    const { rows } = await this.pool.query(
+      `SELECT (SELECT max(started_at) FROM scan_runs) AS scanned_at,
+              (SELECT max(greatest(indexed_at, missing_at)) FROM badges) AS changed_at`,
+    );
+    const { scanned_at, changed_at } = rows[0];
+    return { scannedAt: scanned_at, stale: !scanned_at || (changed_at !== null && changed_at > scanned_at) };
   }
 
   async latestRun(): Promise<ScanRun | null> {

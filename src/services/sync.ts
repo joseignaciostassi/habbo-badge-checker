@@ -1,0 +1,158 @@
+import { config } from "../config";
+import { hasChanges } from "../core/folderDiff";
+import { ScanRepository } from "../data/scanRepo";
+import { UpdateBusyError, withUpdateLock } from "../data/updateLock";
+import { computeFolderDiff, runIndex } from "./indexBadges";
+import { runScan } from "./scanBadges";
+
+/** How many file names of each kind the status lists. */
+const EXAMPLES = 20;
+/** Listing the folder stats ~27k files, so the status is reused for a few seconds. */
+const CACHE_MS = 3000;
+
+export interface FolderChanges {
+  added: number;
+  changed: number;
+  outdated: number;
+  restored: number;
+  missing: number;
+  /** Too many missing at once: "Actualizar BD" will not mark them unless forced. */
+  massMissing: boolean;
+  /** Missing share of the active badges, 0..1. */
+  missingRatio: number;
+  examples: { added: string[]; changed: string[]; restored: string[]; missing: string[] };
+}
+
+export interface SyncJob {
+  running: boolean;
+  phase: "indexing" | "scanning" | "done" | "error";
+  progress: { done: number; total: number } | null;
+  startedAt: string;
+  finishedAt: string | null;
+  result: {
+    indexed: number;
+    errors: number;
+    markedMissing: number;
+    blockedMissing: number;
+    scanned: boolean;
+    exactGroups?: number;
+    similarGroups?: number;
+  } | null;
+  error: string | null;
+}
+
+export interface SyncStatus {
+  /** Null while an update is running. */
+  folder: FolderChanges | null;
+  /** Folder differs from the index. */
+  folderChanged: boolean;
+  /** No scan yet, or badges changed after the last one. */
+  scanStale: boolean;
+  scannedAt: string | null;
+  job: SyncJob | null;
+  /** Anything for "Actualizar BD" to do (missing badges held by the safety brake do not count). */
+  needsUpdate: boolean;
+}
+
+// Kept on globalThis so Next.js dev hot reloads keep the running job and the cache.
+const g = globalThis as {
+  __syncJob?: SyncJob;
+  __syncStatus?: { at: number; value: Promise<Omit<SyncStatus, "job">> };
+};
+
+async function computeStatus(): Promise<Omit<SyncStatus, "job">> {
+  const [diff, fresh] = await Promise.all([computeFolderDiff(), new ScanRepository().freshness()]);
+  const names = (fs: { name: string }[]) => fs.slice(0, EXAMPLES).map((f) => f.name);
+  const folder: FolderChanges = {
+    added: diff.added.length,
+    changed: diff.changed.length,
+    outdated: diff.outdated.length,
+    restored: diff.restored.length,
+    missing: diff.missing.length,
+    massMissing: diff.massMissing,
+    missingRatio: diff.active ? diff.missing.length / diff.active : 0,
+    examples: {
+      added: names(diff.added),
+      changed: names(diff.changed),
+      restored: names(diff.restored),
+      missing: diff.missing.slice(0, EXAMPLES),
+    },
+  };
+  const folderChanged = hasChanges(diff);
+  const onlyHeldMissing =
+    diff.massMissing && folder.added + folder.changed + folder.outdated + folder.restored === 0;
+  return {
+    folder,
+    folderChanged,
+    scanStale: fresh.stale,
+    scannedAt: fresh.scannedAt?.toISOString() ?? null,
+    needsUpdate: (folderChanged && !onlyHeldMissing) || fresh.stale,
+  };
+}
+
+export async function getSyncStatus(): Promise<SyncStatus> {
+  const job = g.__syncJob ?? null;
+  if (job?.running) {
+    return { folder: null, folderChanged: false, scanStale: false, scannedAt: null, job, needsUpdate: false };
+  }
+  if (!g.__syncStatus || Date.now() - g.__syncStatus.at > CACHE_MS) {
+    const value = computeStatus();
+    g.__syncStatus = { at: Date.now(), value };
+    value.catch(() => (g.__syncStatus = undefined));
+  }
+  return { ...(await g.__syncStatus.value), job };
+}
+
+/**
+ * Starts "Actualizar BD" in the background: incremental index (new, changed, restored,
+ * missing badges) and then a full scan if anything changed since the last one.
+ * Returns false when an update is already running in this process.
+ */
+export function startSync(opts: { allowMassMissing?: boolean } = {}): boolean {
+  if (g.__syncJob?.running) return false;
+  const job: SyncJob = {
+    running: true,
+    phase: "indexing",
+    progress: null,
+    startedAt: new Date().toISOString(),
+    finishedAt: null,
+    result: null,
+    error: null,
+  };
+  g.__syncJob = job;
+
+  void (async () => {
+    try {
+      await withUpdateLock(async () => {
+        const idx = await runIndex({
+          allowMassMissing: opts.allowMassMissing,
+          onProgress: (done, total) => (job.progress = { done, total }),
+        });
+        job.result = {
+          indexed: idx.processed,
+          errors: idx.errors,
+          markedMissing: idx.markedMissing,
+          blockedMissing: idx.blockedMissing,
+          scanned: false,
+        };
+        if ((await new ScanRepository().freshness()).stale) {
+          job.phase = "scanning";
+          job.progress = null;
+          const scan = await runScan(config.scanThresholds, (done, total) => (job.progress = { done, total }));
+          job.result = { ...job.result, scanned: true, exactGroups: scan.stats.exactGroups, similarGroups: scan.stats.similarGroups };
+        }
+      });
+      job.phase = "done";
+    } catch (e) {
+      job.phase = "error";
+      job.error = e instanceof UpdateBusyError ? e.message : `Error al actualizar: ${e instanceof Error ? e.message : String(e)}`;
+      if (!(e instanceof UpdateBusyError)) console.error(e);
+    } finally {
+      job.running = false;
+      job.progress = null;
+      job.finishedAt = new Date().toISOString();
+      g.__syncStatus = undefined;
+    }
+  })();
+  return true;
+}
