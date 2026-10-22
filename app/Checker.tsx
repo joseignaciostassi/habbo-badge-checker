@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type ExactMatch, MATCH_LABELS } from "@/core/compare";
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_SIDE, sniffFormat, uploadProblem } from "@/core/uploadRules";
+import { UploadIcon } from "./icons";
 import { PixelBadge } from "./PixelBadge";
+
+const placas = (n: number) => `${n} ${n === 1 ? "placa" : "placas"}`;
 
 interface BadgeInfo {
   id: number;
@@ -122,7 +125,9 @@ export function Checker({ defaults }: { defaults: Thresholds }) {
         {preview && up ? (
           <PixelBadge src={preview} width={up.width} height={up.height} scale={4} box={210} title="Placa subida" />
         ) : (
-          <div className="pixel-box" style={{ width: 210, height: 210 }} />
+          <div className="pixel-box" style={{ width: 210, height: 210 }}>
+            <UploadIcon size={32} />
+          </div>
         )}
         <div className="info">
           {file ? <span className="name">{file.name}</span> : <span className="name">Subí una placa</span>}
@@ -149,7 +154,7 @@ export function Checker({ defaults }: { defaults: Thresholds }) {
       {result && preview && up && (
         <>
           <h2>
-            Duplicados exactos <span className="count">({result.exact.length})</span>
+            Duplicados exactos <span className="count">{placas(result.exact.length)}</span>
           </h2>
           {result.exact.length === 0 ? (
             <p className="empty">No hay duplicados exactos.</p>
@@ -164,7 +169,7 @@ export function Checker({ defaults }: { defaults: Thresholds }) {
           )}
 
           <h2>
-            Similares <span className="count">({result.similar.length})</span>
+            Similares <span className="count">{placas(result.similar.length)}</span>
           </h2>
           <div className="controls">
             <Slider
@@ -190,7 +195,7 @@ export function Checker({ defaults }: { defaults: Thresholds }) {
                 />
               </div>
             </details>
-            <button type="button" onClick={() => setThresholds(defaults)}>
+            <button type="button" className="btn small" onClick={() => setThresholds(defaults)}>
               Restablecer
             </button>
           </div>
@@ -201,7 +206,7 @@ export function Checker({ defaults }: { defaults: Thresholds }) {
               {result.similar.map((m) => (
                 <MatchCard key={m.id} badge={m} preview={preview} up={up}>
                   <span className="tag similar">Diseño {Math.round(m.design * 100)}%</span>
-                  <span className="meta">
+                  <span className="meta mono">
                     dHash {m.dhash} · silueta {m.silhouette}
                   </span>
                 </MatchCard>
@@ -233,7 +238,7 @@ function MatchCard({
       </div>
       <div className="info">
         <span className="name">{badge.fileName}</span>
-        <span className="meta">
+        <span className="meta mono">
           {badge.width}x{badge.height}
           {badge.animated ? " · animada" : ""}
         </span>

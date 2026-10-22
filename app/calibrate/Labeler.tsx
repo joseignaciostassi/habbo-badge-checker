@@ -118,7 +118,7 @@ export function Labeler() {
       )}
 
       <h2>Estimación por umbral de diseño</h2>
-      <div className="panel table-wrap">
+      <div className="table-wrap">
         <table className="report">
           <thead>
             <tr>
@@ -143,15 +143,15 @@ export function Labeler() {
             ))}
           </tbody>
         </table>
-        <p className="meta">
-          Precisión: de los pares que se reportarían, cuántos son parecidos según tus etiquetas. Cobertura: de los pares
-          parecidos con diseño ≥ {state.strata.length ? bound(state.strata[0].lo) : "–"}, cuántos se reportarían. Falsos por consulta: placas no relacionadas que aparecerían
-          en promedio al verificar una placa.
-        </p>
       </div>
+      <p className="meta table-note">
+        Precisión: de los pares que se reportarían, cuántos son parecidos según tus etiquetas. Cobertura: de los pares
+        parecidos con diseño ≥ {state.strata.length ? bound(state.strata[0].lo) : "–"}, cuántos se reportarían. Falsos por consulta: placas no relacionadas que aparecerían
+        en promedio al verificar una placa.
+      </p>
 
       <h2>Progreso por franja</h2>
-      <div className="panel table-wrap">
+      <div className="table-wrap">
         <table className="report">
           <thead>
             <tr>

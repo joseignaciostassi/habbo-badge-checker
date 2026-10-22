@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FolderChanges, SyncJob, SyncStatus } from "@/services/sync";
+import { RefreshIcon, XIcon } from "./icons";
 import { SetupDialog } from "./SetupDialog";
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -154,8 +155,8 @@ export function SyncBanner() {
       {finished && (
         <div className={`sync-banner ${finished.phase === "error" ? "warn" : "ok"}`} role="status">
           <span className="sync-text">{finished.phase === "error" ? finished.error : resultText(finished)}</span>
-          <button className="btn small ghost" onClick={() => setFinished(null)} aria-label="Cerrar">
-            ✕
+          <button className="icon-btn" onClick={() => setFinished(null)} aria-label="Cerrar">
+            <XIcon size={14} />
           </button>
         </div>
       )}
@@ -169,6 +170,7 @@ export function SyncBanner() {
             )}
           </span>
           <button className="btn small primary" onClick={() => start()}>
+            <RefreshIcon size={14} />
             Actualizar BD
           </button>
           {examples.length > 0 && (
