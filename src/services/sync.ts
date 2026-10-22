@@ -37,6 +37,8 @@ export interface SyncJob {
   setup: boolean;
   phase: "creating" | "indexing" | "scanning" | "done" | "error";
   progress: { done: number; total: number } | null;
+  /** While scanning: "incremental" compares only `changed` badges against the base. */
+  scan: { mode: "full" | "incremental"; changed: number } | null;
   startedAt: string;
   finishedAt: string | null;
   result: {
@@ -127,7 +129,8 @@ export async function getSyncStatus(): Promise<SyncStatus> {
 
 /**
  * Starts "Actualizar BD" in the background: incremental index (new, changed, restored,
- * missing badges) and then a full scan if anything changed since the last one. With `setup`
+ * missing badges) and then, if anything changed since the last scan, a scan of the changed
+ * badges against the base (a full one when runScan cannot reuse the previous run). With `setup`
  * (first run) it first creates the database and applies the migrations.
  * Returns false when an update is already running in this process.
  */
@@ -138,6 +141,7 @@ export function startSync(opts: { allowMassMissing?: boolean; setup?: boolean } 
     setup: opts.setup === true,
     phase: opts.setup ? "creating" : "indexing",
     progress: null,
+    scan: null,
     startedAt: new Date().toISOString(),
     finishedAt: null,
     result: null,
@@ -166,7 +170,9 @@ export function startSync(opts: { allowMassMissing?: boolean; setup?: boolean } 
         if ((await new ScanRepository().freshness()).stale) {
           job.phase = "scanning";
           job.progress = null;
-          const scan = await runScan(config.scanThresholds, (done, total) => (job.progress = { done, total }));
+          const scan = await runScan(config.scanThresholds, (done, total) => (job.progress = { done, total }), {
+            onStart: (mode, changed) => (job.scan = { mode, changed }),
+          });
           job.result = { ...job.result, scanned: true, exactGroups: scan.stats.exactGroups, similarGroups: scan.stats.similarGroups };
         }
       });

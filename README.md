@@ -50,7 +50,7 @@ Levanta la web en modo desarrollo en `http://localhost:3000`, con recarga autom�
 - `/scan` — **Escaneo:** los grupos de duplicados y de similares que ya existen en la base, según el último `npm run scan`.
 - `/calibrate` — **Calibración:** etiquetado de pares para calibrar los umbrales.
 
-**Aviso de cambios y botón "Actualizar BD".** En todas las páginas, la web compara la carpeta de placas con la base al cargar y cada vez que volvés a la pestaña. Si hay placas nuevas, modificadas, eliminadas o restauradas, o si el escaneo es anterior a los últimos cambios, muestra un aviso con los conteos ("Ver placas" lista los nombres) y un botón **Actualizar BD**. El botón hace en segundo plano lo mismo que `npm run index` y, si hace falta, `npm run scan`, mostrando el progreso. Al terminar, `/scan` se actualiza solo. Si no hay cambios, no se muestra nada.
+**Aviso de cambios y botón "Actualizar BD".** En todas las páginas, la web compara la carpeta de placas con la base al cargar y cada vez que volvés a la pestaña. Si hay placas nuevas, modificadas, eliminadas o restauradas, o si el escaneo es anterior a los últimos cambios, muestra un aviso con los conteos ("Ver placas" lista los nombres) y un botón **Actualizar BD**. El botón hace en segundo plano lo mismo que `npm run index` y, si hace falta, actualiza el escaneo, mostrando el progreso. El escaneo es **incremental**: solo compara las placas que cambiaron desde el último escaneo contra toda la base y conserva el resto de los pares, así que con unas pocas placas nuevas tarda menos de un segundo en vez de ~35 s. Hace un escaneo completo si no hay uno previo, si cambiaron los umbrales o si cambió más del 25% de las placas. Al terminar, `/scan` se actualiza solo. Si no hay cambios, no se muestra nada.
 
 Revisar la carpeta tarda unos 2–3 s con 27.000 placas, pero no frena la página: el aviso aparece cuando termina.
 
@@ -164,6 +164,8 @@ Analiza toda la base contra sí misma y guarda el resultado, que es lo que muest
 - **Similares:** pares que pasan el prefiltro y el score de diseño, agrupados en grupos "estrella": una placa central y las placas que se parecen directamente a ella. Los grupos no se encadenan.
 
 Cada escaneo reemplaza al anterior. Al terminar imprime los totales y los grupos más grandes.
+
+Este comando siempre recalcula todo (el botón **Actualizar BD** solo compara lo que cambió). Usalo para forzar un escaneo completo, por ejemplo después de cambiar la función de similitud en una migración.
 
 Opciones: `--design N`, `--dhash N` y `--sil N`. Por defecto usa `SIM_SCAN_DESIGN_MIN` y el mismo prefiltro que la web.
 

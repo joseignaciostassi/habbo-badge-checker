@@ -23,6 +23,7 @@ async function main() {
   const { stats, exactGroups, similarGroups, seconds } = await withUpdateLock(() =>
     runScan(t, (done, total, pairs) =>
       process.stdout.write(`\rSimilitud: bloque ${done}/${total}  ${((Date.now() - t0) / 1000).toFixed(0)}s  pares: ${pairs}   `),
+      { full: true },
     ),
   );
   process.stdout.write("\n");

@@ -23,6 +23,10 @@ function progressText(job: SyncJob): string {
   const p = job.progress;
   if (job.phase === "creating") return "Creando la base de datos…";
   if (job.phase === "indexing") return p ? `Indexando placas ${p.done}/${p.total}…` : "Revisando la carpeta…";
+  if (job.scan?.mode === "incremental") {
+    const what = `Comparando ${plural(job.scan.changed, "placa", "placas")} con la base`;
+    return p && p.total > 1 ? `${what}, tanda ${p.done}/${p.total}…` : `${what}…`;
+  }
   return p ? `Escaneando la base, bloque ${p.done}/${p.total}…` : "Escaneando la base…";
 }
 
@@ -33,7 +37,7 @@ function resultText(job: SyncJob): string {
     r.indexed && plural(r.indexed, "placa indexada", "placas indexadas"),
     r.errors && plural(r.errors, "archivo con error", "archivos con error"),
     r.markedMissing && plural(r.markedMissing, "marcada como eliminada", "marcadas como eliminadas"),
-    r.scanned && `escaneo rehecho (${r.exactGroups} grupos exactos, ${r.similarGroups} de similares)`,
+    r.scanned && `escaneo actualizado (${r.exactGroups} grupos exactos, ${r.similarGroups} de similares)`,
   ].filter(Boolean);
   return `Base actualizada${parts.length ? `: ${parts.join(", ")}` : ""}.`;
 }
