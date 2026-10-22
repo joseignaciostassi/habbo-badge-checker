@@ -312,7 +312,11 @@ kbd {
 .controls output { min-width: 4ch; font: 500 12px var(--font-mono); }
 .controls details { color: var(--muted-foreground); }
 .controls details summary { cursor: pointer; }
+.controls details[open] { flex-basis: 100%; order: 1; }
 .controls details .controls { margin: 10px 0 0; color: var(--foreground); }
+.prefilter-help { max-width: 640px; margin-top: 10px; color: var(--muted-foreground); font-size: 12px; }
+.prefilter-help p { margin: 0 0 6px; }
+.prefilter-help strong { color: var(--foreground); font-weight: 500; }
 
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
 .match { display: grid; gap: 12px; padding: 12px; }

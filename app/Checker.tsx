@@ -194,6 +194,22 @@ export function Checker({ defaults }: { defaults: Thresholds }) {
                   onChange={(silhouette) => setThresholds((t) => ({ ...t, silhouette }))}
                 />
               </div>
+              <div className="prefilter-help">
+                <p>
+                  <strong>dHash:</strong> huella del dibujo en luces y sombras. Achica la placa a 9x8 y anota, en cada fila,
+                  si cada zona es más clara o más oscura que la de al lado (64 comparaciones).
+                </p>
+                <p>
+                  <strong>Silueta:</strong> huella de la forma. Achica la placa a 8x8 y anota qué zonas son visibles y cuáles
+                  transparentes.
+                </p>
+                <p>
+                  El número es cuántas de las 64 casillas cambian entre las dos placas: 0 es igual y 64 es totalmente
+                  distinta. Es solo un filtro rápido: las placas que quedan por debajo de los dos valores pasan a la
+                  comparación de <strong>Diseño</strong>, que es la que decide. Subirlos trae más candidatas y hace la
+                  búsqueda más lenta; bajarlos puede dejar afuera placas parecidas.
+                </p>
+              </div>
             </details>
             <button type="button" className="btn small" onClick={() => setThresholds(defaults)}>
               Restablecer
