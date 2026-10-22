@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A local tool for a Habbo emulator ("holo") admin to check, before uploading a badge (40x40/42x42 GIF/PNG, usually static, sometimes animated), whether an identical or similar badge already exists among ~27k badges. Next.js (App Router) + TypeScript, `sharp` for decoding, PostgreSQL 18 (local now, Supabase later), images read from a local folder (Supabase Storage later). The UI and conversation with the user are in Spanish (rioplatense). Everything is done from the web; there are no CLI scripts.
+A local tool for a Habbo emulator ("holo") admin to check, before uploading a badge (40x40/42x42 GIF/PNG, usually static, sometimes animated), whether an identical or similar badge already exists among ~27k badges. Next.js (App Router) + TypeScript, `sharp` for decoding, PostgreSQL 18 (local), images read from a local folder (`BADGES_DIR`). The UI and conversation with the user are in Spanish (rioplatense). Everything is done from the web; there are no CLI scripts.
 
 ## Commands
 
@@ -27,7 +27,7 @@ Layers:
 
 - `src/core/` — pure image logic, no I/O. `analyzeBadge(buffer)` in `analyze.ts` is the single entry point used by the indexer and the web API.
 - `src/data/` — PostgreSQL via plain `pg` and SQL (no ORM). `badgeRepo.ts` (index + lookups), `scanRepo.ts`, `calibrationRepo.ts`. Pool cached on `globalThis` for Next dev HMR.
-- `src/storage/` — `ImageStore` interface; `LocalFsStore` reads `BADGES_DIR` read-only. A Supabase Storage implementation is meant to slot in here for the Vercel deploy.
+- `src/storage/` — `ImageStore` interface; `LocalFsStore` reads `BADGES_DIR` read-only; another image source would be a new `ImageStore` implementation.
 - `src/services/` — `checkBadge.ts` (analyze + exact + similar lookup; `/api/check`, gated by `validateUpload.ts`: `.gif`/`.png` name, GIF/PNG content, ≤ 200 KB, ≤ 50x50 per frame; the pure rules in `src/core/uploadRules.ts` are also checked in the browser before uploading; the indexed folder is never limited), `indexBadges.ts` / `scanBadges.ts` (index and scan), `sync.ts` (change status and the "Actualizar BD" job), `calibrationSample.ts` (the "Generar más pares" job).
 
 ### Analysis pipeline (`src/core`)

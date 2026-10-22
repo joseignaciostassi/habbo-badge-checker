@@ -156,7 +156,4 @@ No hay comandos para la base: se crea y se migra sola.
 - La base no se actualiza sola: la web avisa de los cambios en la carpeta, pero hay que tocar **Actualizar BD**.
 - Placas de la **misma plantilla con distinto ícono o número**, como los `ACH_*` con números romanos, suelen quedar por debajo del umbral, porque el score compara el dibujo completo.
 - Las placas de más de 42px usan solo el recorte centrado.
-
-### Preparado para el deploy
-
-La capa de datos (`src/data/`, SQL plano con `pg`) y el almacenamiento de imágenes (`src/storage/`, interfaz `ImageStore`) están desacoplados. Para pasar a Vercel + Supabase se cambia `DATABASE_URL` y se agrega una implementación de `ImageStore` para Supabase Storage.
+- Pensada para uso local: un deploy en Vercel + Supabase requeriría rehacer los trabajos en segundo plano, la creación de la base y el acceso a las placas.

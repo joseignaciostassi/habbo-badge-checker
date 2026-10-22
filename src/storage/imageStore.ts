@@ -4,7 +4,7 @@ export interface StoredImage {
   mtime: Date;
 }
 
-/** Read-only access to the badge image collection (local folder now, Supabase Storage later). */
+/** Read-only access to the badge image collection. */
 export interface ImageStore {
   list(): Promise<StoredImage[]>;
   read(name: string): Promise<Buffer>;
