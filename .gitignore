@@ -9,4 +9,7 @@ next-env.d.ts
 *.gif
 *.png
 !public/**/*.png
+# Demo badges (downloaded from the GitHub Release)
+/badges/
+badges.zip
 reports/

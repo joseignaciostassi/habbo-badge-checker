@@ -48,7 +48,7 @@ hash prefilter (`dhash ≤ SIM_DHASH_MAX AND silhouette ≤ SIM_SILHOUETTE_MAX`)
 - Any change to fingerprints/hashes must bump `ANALYSIS_VERSION` in `src/core/analyze.ts`; the indexer reprocesses badges whose stored `analysis_version` is lower (otherwise it only processes new or changed files by size+mtime).
 - Migrations are append-only numbered SQL files; never edit an applied one.
 - Badges whose file left the folder are soft-deleted (`badges.missing_at`): the row stays (scan/calibration references, labels) but its hashes and frames are deleted, so lookups and scans skip it without extra filters; queries that read `badges` directly must filter `missing_at IS NULL`. `folderDiff()` (`src/core/folderDiff.ts`) decides what is new/changed/outdated/restored/missing for both the indexer and the web; it refuses to mark more than 5% missing at once unless forced. The file name is the badge's identity: renames are a delete plus a new badge, never merged.
-- Never write to `BADGES_DIR` or copy badges into the repo (`.gitignore` excludes `*.gif`/`*.png`).
+- Never write to `BADGES_DIR` or copy badges into the repo (`.gitignore` excludes `*.gif`/`*.png`). The demo badges are a `badges.zip` attached to a GitHub Release, extracted into the gitignored `./badges` that `.env.example` points `BADGES_DIR` at; never commit them.
 
 ### Scan and calibration
 

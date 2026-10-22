@@ -11,16 +11,16 @@ Stack: Next.js (App Router) + TypeScript, `sharp` para procesar imágenes y Post
 
 - Node.js 24 o superior.
 - PostgreSQL 14 o superior (se usa `bit_count()`); hoy corre con PostgreSQL 18 local.
-- La carpeta de placas (`.gif`/`.png`).
+- Una carpeta de placas (`.gif`/`.png`): la tuya o la de la demo (ver **Puesta en marcha**).
 
 ## Configuración (`.env`)
 
 Copiá `.env.example` a `.env` y completá los valores:
 
-| Variable | Qué es | Valor actual |
+| Variable | Qué es | Valor de ejemplo |
 |---|---|---|
 | `DATABASE_URL` | Conexión a PostgreSQL. La base es exclusiva del proyecto. | `postgres://…/badge_checker` |
-| `BADGES_DIR` | Carpeta con las placas originales (solo lectura). | `C:\Users\Joe\Desktop\badges-all-hotels-gif` |
+| `BADGES_DIR` | Carpeta con las placas originales (solo lectura). Una ruta relativa se toma desde la raíz del proyecto. | `./badges` (las placas de la demo) |
 | `SIM_DHASH_MAX` | Prefiltro: distancia máxima de dHash (0–64). | `20` |
 | `SIM_SILHOUETTE_MAX` | Prefiltro: distancia máxima de silueta (0–64). | `10` |
 | `SIM_DESIGN_MIN` | Score de diseño mínimo para la **web de verificación** (0–1). | `0.575` (~93% de precisión) |
@@ -30,12 +30,29 @@ Los umbrales de diseño se calibraron con 409 pares etiquetados a mano (ver **Ca
 
 ## Puesta en marcha (primera vez)
 
-```bash
-npm install
-```
-```bash
-npm run dev
-```
+1. Instalá Node.js y PostgreSQL (ver **Requisitos**) y cloná el repo.
+2. **Placas de la demo.** Si no tenés tu propia carpeta, descargá el `badges.zip` de la demo (publicado en un [Release](https://github.com/joseignaciostassi/habbo-badge-checker/releases/latest)) y descomprimilas en `badges/`, dentro del proyecto:
+
+   ```bash
+   curl -L -o badges.zip https://github.com/joseignaciostassi/habbo-badge-checker/releases/latest/download/badges.zip
+   ```
+   ```bash
+   mkdir badges
+   ```
+   ```bash
+   tar -xf badges.zip -C badges
+   ```
+
+   `curl` y `tar` vienen con Windows 10+, macOS y Linux (en Windows PowerShell, escribí `curl.exe`). La carpeta `badges/` y el zip están en `.gitignore`.
+3. Copiá `.env.example` a `.env` y ajustá `DATABASE_URL` con tu usuario y contraseña de PostgreSQL. `BADGES_DIR` ya apunta a `./badges`; si usás tu propia carpeta, poné su ruta.
+4. Instalá las dependencias y levantá la web:
+
+   ```bash
+   npm install
+   ```
+   ```bash
+   npm run dev
+   ```
 
 Después abrí `http://localhost:3000`. Si la base todavía no existe, la web muestra el popup **"Primera ejecución"**: explica que hace falta una base de datos para guardar los hashes y, con el botón **Crear base de datos**, la crea, aplica las migraciones, indexa todas las placas y hace el primer escaneo, mostrando el progreso (unos 2 minutos con 27.000 placas). Si no se puede conectar a PostgreSQL, el popup lo indica y ofrece **Reintentar**.
 
