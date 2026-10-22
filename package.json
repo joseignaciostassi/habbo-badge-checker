@@ -9,8 +9,6 @@
     "start": "next start",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "db:create": "tsx src/scripts/createDb.ts",
-    "migrate": "tsx src/scripts/migrate.ts",
     "index": "tsx src/scripts/index.ts",
     "compare": "tsx src/scripts/compare.ts",
     "scan": "tsx src/scripts/scan.ts",

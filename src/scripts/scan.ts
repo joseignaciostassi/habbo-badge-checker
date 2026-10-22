@@ -3,6 +3,7 @@ import { parseArgs } from "node:util";
 import { config } from "../config";
 import { MATCH_LABELS } from "../core/compare";
 import { closePool, getPool } from "../data/db";
+import { DatabaseUnavailableError, prepareDatabase } from "../data/setup";
 import { UpdateBusyError, withUpdateLock } from "../data/updateLock";
 import { runScan } from "../services/scanBadges";
 
@@ -11,6 +12,7 @@ const { values: args } = parseArgs({
 });
 
 async function main() {
+  await prepareDatabase();
   const t = {
     dhash: args.dhash ? Number(args.dhash) : config.scanThresholds.dhash,
     silhouette: args.sil ? Number(args.sil) : config.scanThresholds.silhouette,
@@ -44,7 +46,7 @@ async function main() {
 
 main()
   .catch((e) => {
-    console.error(e instanceof UpdateBusyError ? e.message : e);
+    console.error(e instanceof UpdateBusyError || e instanceof DatabaseUnavailableError ? e.message : e);
     process.exitCode = 1;
   })
   .finally(closePool);

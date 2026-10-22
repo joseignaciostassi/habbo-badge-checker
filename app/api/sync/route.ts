@@ -12,10 +12,10 @@ export async function GET() {
   }
 }
 
-/** Starts "Actualizar BD". Body: { allowMassMissing?: boolean }. Answers at once; poll GET. */
+/** Starts "Actualizar BD". Body: { allowMassMissing?: boolean, setup?: boolean }. Answers at once; poll GET. */
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
-  if (!startSync({ allowMassMissing: body?.allowMassMissing === true })) {
+  if (!startSync({ allowMassMissing: body?.allowMassMissing === true, setup: body?.setup === true })) {
     return Response.json({ error: "Ya hay una actualización en curso." }, { status: 409 });
   }
   return Response.json(await getSyncStatus(), { status: 202 });

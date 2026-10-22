@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FolderChanges, SyncJob, SyncStatus } from "@/services/sync";
+import { SetupDialog } from "./SetupDialog";
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
@@ -20,6 +21,7 @@ function changeSummary(f: FolderChanges): string {
 
 function progressText(job: SyncJob): string {
   const p = job.progress;
+  if (job.phase === "creating") return "Creando la base de datos…";
   if (job.phase === "indexing") return p ? `Indexando placas ${p.done}/${p.total}…` : "Revisando la carpeta…";
   return p ? `Escaneando la base, bloque ${p.done}/${p.total}…` : "Escaneando la base…";
 }
@@ -38,7 +40,8 @@ function resultText(job: SyncJob): string {
 
 /**
  * Tells when the badges folder changed since the last index (or the scan is older than the
- * index) and offers "Actualizar BD", which indexes and rescans in the background.
+ * index) and offers "Actualizar BD", which indexes and rescans in the background. On the first
+ * run (no database yet) it shows SetupDialog instead.
  */
 export function SyncBanner() {
   const router = useRouter();
@@ -81,13 +84,13 @@ export function SyncBanner() {
     return () => clearInterval(id);
   }, [running, refresh]);
 
-  const start = async (allowMassMissing = false) => {
+  const start = async (allowMassMissing = false, setup = false) => {
     setFinished(null);
     try {
       const res = await fetch("/api/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ allowMassMissing }),
+        body: JSON.stringify({ allowMassMissing, setup }),
       });
       const data = await res.json();
       if (!res.ok && res.status !== 409) throw new Error(data.error ?? res.statusText);
@@ -106,6 +109,19 @@ export function SyncBanner() {
     );
   }
   if (!status) return null;
+
+  if (status.setup.state !== "ready" || (status.job?.running && status.job.setup)) {
+    return (
+      <SetupDialog
+        setup={status.setup}
+        job={status.job}
+        progress={status.job ? progressText(status.job) : ""}
+        error={finished?.phase === "error" ? finished.error : null}
+        onCreate={() => start(false, true)}
+        onRetry={refresh}
+      />
+    );
+  }
 
   if (status.job?.running) {
     return (

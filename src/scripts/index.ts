@@ -4,6 +4,7 @@ import { parseArgs } from "node:util";
 import { MASS_MISSING_RATIO } from "../core/folderDiff";
 import { PgBadgeRepository } from "../data/badgeRepo";
 import { closePool } from "../data/db";
+import { DatabaseUnavailableError, prepareDatabase } from "../data/setup";
 import { UpdateBusyError, withUpdateLock } from "../data/updateLock";
 import { runIndex } from "../services/indexBadges";
 
@@ -12,6 +13,7 @@ const { values: args } = parseArgs({
 });
 
 async function main() {
+  await prepareDatabase();
   const started = Date.now();
   let shownTotal = false;
   const r = await withUpdateLock(() =>
@@ -72,6 +74,6 @@ async function printSummary(repo: PgBadgeRepository) {
 }
 
 main().catch((e) => {
-  console.error(e instanceof UpdateBusyError ? e.message : e);
+  console.error(e instanceof UpdateBusyError || e instanceof DatabaseUnavailableError ? e.message : e);
   process.exitCode = 1;
 }).finally(closePool);

@@ -5,6 +5,7 @@ import { config } from "../config";
 import { MATCH_LABELS } from "../core/compare";
 import { PgBadgeRepository } from "../data/badgeRepo";
 import { closePool } from "../data/db";
+import { DatabaseUnavailableError, prepareDatabase } from "../data/setup";
 import { checkBadge } from "../services/checkBadge";
 
 const { values: args, positionals } = parseArgs({
@@ -24,6 +25,7 @@ async function main() {
     process.exitCode = 1;
     return;
   }
+  await prepareDatabase();
   const thresholds = {
     dhash: args.dhash ? Number(args.dhash) : config.thresholds.dhash,
     silhouette: args.sil ? Number(args.sil) : config.thresholds.silhouette,
@@ -57,6 +59,6 @@ async function main() {
 }
 
 main().catch((e) => {
-  console.error(e);
+  console.error(e instanceof DatabaseUnavailableError ? e.message : e);
   process.exitCode = 1;
 }).finally(closePool);

@@ -6,6 +6,7 @@ import { STRATA, stratumOf, thresholdTable } from "../core/calibration";
 import { isSimilar, perceptualDistance } from "../core/compare";
 import { CalibrationRepository } from "../data/calibrationRepo";
 import { closePool, getPool } from "../data/db";
+import { DatabaseUnavailableError, prepareDatabase } from "../data/setup";
 import { ScanRepository } from "../data/scanRepo";
 import { getImageStore } from "../storage/localFsStore";
 import { rng, syntheticVariants, toPng } from "./syntheticVariants";
@@ -155,6 +156,7 @@ async function report(syntheticN: number) {
 }
 
 async function main() {
+  await prepareDatabase();
   const repo = new CalibrationRepository();
   if (args.sample || !(await repo.hasSample())) await sample(Number(args.per));
   await report(Number(args.synthetic));
@@ -162,7 +164,7 @@ async function main() {
 
 main()
   .catch((e) => {
-    console.error(e);
+    console.error(e instanceof DatabaseUnavailableError ? e.message : e);
     process.exitCode = 1;
   })
   .finally(closePool);

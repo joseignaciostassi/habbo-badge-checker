@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { MATCH_LABELS } from "@/core/compare";
 import { type GroupKind, type ScanGroup, type ScanPair, ScanRepository } from "@/data/scanRepo";
+import { ensureDatabase } from "@/data/setup";
 import { PixelBadge } from "../PixelBadge";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +22,9 @@ export default async function ScanPage({ searchParams }: { searchParams: Promise
   const sp = await searchParams;
   const kind: GroupKind = sp.kind === "similar" ? "similar" : "exact";
   const page = Math.max(1, Number(sp.page) || 1);
+
+  // First run (no database yet): SyncBanner shows the setup dialog instead.
+  if ((await ensureDatabase({ create: false })).state !== "ready") return null;
 
   const repo = new ScanRepository();
   const run = await repo.latestRun();

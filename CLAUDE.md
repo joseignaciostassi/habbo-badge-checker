@@ -13,8 +13,6 @@ npm run dev                 # web UI on http://localhost:3000 (/, /scan, /calibr
 npm test                    # vitest (all tests, DB-free)
 npx vitest run tests/core.test.ts -t "empty frame"   # single file / single test
 npm run typecheck           # tsc --noEmit
-npm run db:create           # create the DB named in DATABASE_URL if missing
-npm run migrate             # apply new files in src/data/migrations/ (tracked in schema_migrations)
 npm run index [-- --limit 200 --allow-mass-missing]   # incremental indexer over BADGES_DIR
 npm run compare -- <image> [--dhash N --sil N --design 0.575 --limit N]
 npm run scan [-- --design 0.725]  # full-base duplicate/similar scan, stored in scan_* tables
@@ -23,7 +21,9 @@ npm run calibrate [-- --sample --per 12 --synthetic 300]  # threshold calibratio
 
 Config lives in `.env` (see `.env.example`): `DATABASE_URL`, `BADGES_DIR`, `SIM_DHASH_MAX`, `SIM_SILHOUETTE_MAX`, `SIM_DESIGN_MIN` (web check), `SIM_SCAN_DESIGN_MIN` (scan). Scripts load it via `dotenv/config`; Next loads it itself.
 
-Nothing runs automatically: starting the app does not index, migrate or scan. Every page shows `SyncBanner` (`app/SyncBanner.tsx`), which asks `GET /api/sync` whether the folder differs from the index or the scan is older than the last change; its "Actualizar BD" button (`POST /api/sync`) runs the same index + scan as the CLI in the background (`src/services/sync.ts`, job state on `globalThis`). The CLI `index`/`scan` and the web update share a PG advisory lock (`src/data/updateLock.ts`), so only one runs at a time.
+There are no DB commands: `src/data/setup.ts` creates the database and applies pending migrations (`src/data/migrations/`, tracked in `schema_migrations`). The CLI scripts call `prepareDatabase()` (create + migrate without asking); the web applies pending migrations on its own and, when the database does not exist or PostgreSQL is unreachable, `SyncBanner` shows `SetupDialog` ("Crear base de datos" runs create + migrate + index + scan as one job; `/scan` and `/calibrate` render nothing until the database is ready). `checkDatabase()` probes the TCP port before using pg, because a refused `localhost` connection makes pg reject with an AggregateError that hangs Next dev renders.
+
+Starting the app does not index or scan. Every page shows `SyncBanner` (`app/SyncBanner.tsx`), which asks `GET /api/sync` whether the folder differs from the index or the scan is older than the last change; its "Actualizar BD" button (`POST /api/sync`) runs the same index + scan as the CLI in the background (`src/services/sync.ts`, job state on `globalThis`). The CLI `index`/`scan` and the web update share a PG advisory lock (`src/data/updateLock.ts`), so only one runs at a time.
 
 ## Architecture
 

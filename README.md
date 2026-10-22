@@ -32,21 +32,19 @@ Los umbrales de diseño se calibraron con 409 pares etiquetados a mano (ver `npm
 
 ```bash
 npm install
-npm run db:create
-npm run migrate
-npm run index
-npm run scan
+```
+```bash
 npm run dev
 ```
 
-Después abrí `http://localhost:3000`.
+Después abrí `http://localhost:3000`. Si la base todavía no existe, la web muestra el popup **"Primera ejecución"**: explica que hace falta una base de datos para guardar los hashes y, con el botón **Crear base de datos**, la crea, aplica las migraciones, indexa todas las placas y hace el primer escaneo, mostrando el progreso (unos 2 minutos con 27.000 placas). Si no se puede conectar a PostgreSQL, el popup lo indica y ofrece **Reintentar**.
 
 ## Comandos npm
 
 ### Desarrollo y calidad
 
 #### `npm run dev`
-Levanta la web en modo desarrollo en `http://localhost:3000`, con recarga automática al editar código. Al iniciar no indexa, no migra ni escanea. Las páginas son:
+Levanta la web en modo desarrollo en `http://localhost:3000`, con recarga automática al editar código. Al iniciar no indexa ni escanea; si hay migraciones nuevas, las aplica sola. Las páginas son:
 
 - `/` — **Verificar:** subís una placa (arrastrando, con clic o pegándola con Ctrl+V) y muestra los duplicados exactos y las similares, cada una ampliada en pixel-art al lado de la tuya. El slider de diseño ajusta el umbral en vivo; dHash y silueta están en "Prefiltro".
 - `/scan` — **Escaneo:** los grupos de duplicados y de similares que ya existen en la base, según el último `npm run scan`.
@@ -69,6 +67,8 @@ Corre todos los tests con Vitest. No necesitan la base de datos: generan placas 
 - Diseños distintos con la misma silueta, y franjas horizontales contra verticales.
 - GIF con frames repetidos, animada contra su versión estática y animada con un frame vacío.
 - Agrupamiento y las estimaciones de la calibración.
+- Qué placas son nuevas, modificadas, eliminadas o restauradas, y el freno de seguridad.
+- Cómo se interpretan los errores de conexión a PostgreSQL.
 
 Para correr un solo archivo o un solo test:
 
@@ -79,13 +79,12 @@ npx vitest run tests/core.test.ts -t "empty frame"
 #### `npm run typecheck`
 Verifica los tipos de TypeScript de todo el proyecto (`tsc --noEmit`) sin generar archivos.
 
-### Base de datos
+### Base de datos (automática)
 
-#### `npm run db:create`
-Crea la base indicada en `DATABASE_URL` si no existe. Para eso se conecta a la base `postgres` del servidor con el mismo usuario. Si la base ya existe, no hace nada.
+No hay comandos para la base: se crea y se migra sola.
 
-#### `npm run migrate`
-Aplica los archivos nuevos de `src/data/migrations/` en orden, cada uno en una transacción, y los registra en `schema_migrations`. Los ya aplicados se saltean, así que se puede correr siempre. Hoy hay 8 migraciones, todas aplicadas:
+- **Creación:** desde el popup de primera ejecución de la web, o al correr cualquier comando que la usa (`index`, `scan`, `compare`, `calibrate`), que la crea sin preguntar e informa "Base … creada". Para crearla se conecta a la base `postgres` del servidor con el mismo usuario de `DATABASE_URL`.
+- **Migraciones:** los archivos nuevos de `src/data/migrations/` se aplican solos, en orden y cada uno en una transacción, la primera vez que la web o un comando usa la base. Se registran en `schema_migrations`. Hoy hay 8:
 
 | Migración | Qué crea |
 |---|---|

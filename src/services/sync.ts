@@ -1,7 +1,9 @@
 import { config } from "../config";
 import { hasChanges } from "../core/folderDiff";
 import { ScanRepository } from "../data/scanRepo";
+import { databaseTarget, ensureDatabase } from "../data/setup";
 import { UpdateBusyError, withUpdateLock } from "../data/updateLock";
+import { getImageStore } from "../storage/localFsStore";
 import { computeFolderDiff, runIndex } from "./indexBadges";
 import { runScan } from "./scanBadges";
 
@@ -23,9 +25,17 @@ export interface FolderChanges {
   examples: { added: string[]; changed: string[]; restored: string[]; missing: string[] };
 }
 
+/** Whether the app's database can be used; anything but "ready" shows the first-run dialog. */
+export type SetupInfo =
+  | { state: "ready" }
+  | { state: "missing"; database: string; host: string; badgesInFolder: number }
+  | { state: "unreachable"; database: string; host: string; error: string };
+
 export interface SyncJob {
   running: boolean;
-  phase: "indexing" | "scanning" | "done" | "error";
+  /** First run: the job also creates the database. */
+  setup: boolean;
+  phase: "creating" | "indexing" | "scanning" | "done" | "error";
   progress: { done: number; total: number } | null;
   startedAt: string;
   finishedAt: string | null;
@@ -42,6 +52,7 @@ export interface SyncJob {
 }
 
 export interface SyncStatus {
+  setup: SetupInfo;
   /** Null while an update is running. */
   folder: FolderChanges | null;
   /** Folder differs from the index. */
@@ -60,7 +71,17 @@ const g = globalThis as {
   __syncStatus?: { at: number; value: Promise<Omit<SyncStatus, "job">> };
 };
 
+const IDLE = { folder: null, folderChanged: false, scanStale: false, scannedAt: null, needsUpdate: false };
+
 async function computeStatus(): Promise<Omit<SyncStatus, "job">> {
+  // Applies pending migrations on the way, so a code update never needs a manual step.
+  const db = await ensureDatabase({ create: false });
+  if (db.state === "missing") {
+    const badgesInFolder = (await getImageStore().list()).length;
+    return { ...IDLE, setup: { state: "missing", ...databaseTarget(), badgesInFolder } };
+  }
+  if (db.state === "unreachable") return { ...IDLE, setup: { state: "unreachable", ...databaseTarget(), error: db.error } };
+
   const [diff, fresh] = await Promise.all([computeFolderDiff(), new ScanRepository().freshness()]);
   const names = (fs: { name: string }[]) => fs.slice(0, EXAMPLES).map((f) => f.name);
   const folder: FolderChanges = {
@@ -82,6 +103,7 @@ async function computeStatus(): Promise<Omit<SyncStatus, "job">> {
   const onlyHeldMissing =
     diff.massMissing && folder.added + folder.changed + folder.outdated + folder.restored === 0;
   return {
+    setup: { state: "ready" },
     folder,
     folderChanged,
     scanStale: fresh.stale,
@@ -93,7 +115,7 @@ async function computeStatus(): Promise<Omit<SyncStatus, "job">> {
 export async function getSyncStatus(): Promise<SyncStatus> {
   const job = g.__syncJob ?? null;
   if (job?.running) {
-    return { folder: null, folderChanged: false, scanStale: false, scannedAt: null, job, needsUpdate: false };
+    return { ...IDLE, setup: { state: "ready" }, job };
   }
   if (!g.__syncStatus || Date.now() - g.__syncStatus.at > CACHE_MS) {
     const value = computeStatus();
@@ -105,14 +127,16 @@ export async function getSyncStatus(): Promise<SyncStatus> {
 
 /**
  * Starts "Actualizar BD" in the background: incremental index (new, changed, restored,
- * missing badges) and then a full scan if anything changed since the last one.
+ * missing badges) and then a full scan if anything changed since the last one. With `setup`
+ * (first run) it first creates the database and applies the migrations.
  * Returns false when an update is already running in this process.
  */
-export function startSync(opts: { allowMassMissing?: boolean } = {}): boolean {
+export function startSync(opts: { allowMassMissing?: boolean; setup?: boolean } = {}): boolean {
   if (g.__syncJob?.running) return false;
   const job: SyncJob = {
     running: true,
-    phase: "indexing",
+    setup: opts.setup === true,
+    phase: opts.setup ? "creating" : "indexing",
     progress: null,
     startedAt: new Date().toISOString(),
     finishedAt: null,
@@ -123,6 +147,10 @@ export function startSync(opts: { allowMassMissing?: boolean } = {}): boolean {
 
   void (async () => {
     try {
+      const db = await ensureDatabase({ create: job.setup });
+      if (db.state === "unreachable") throw new Error(db.error);
+      if (db.state === "missing") throw new Error(`La base ${databaseTarget().database} no existe.`);
+      job.phase = "indexing";
       await withUpdateLock(async () => {
         const idx = await runIndex({
           allowMassMissing: opts.allowMassMissing,
