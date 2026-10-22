@@ -1,14 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import type { StratumStats, ThresholdRow } from "@/core/calibration";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { SAMPLE_EXTRA, type StratumStats, type ThresholdRow } from "@/core/calibration";
 import type { CalibrationPair, Label } from "@/data/calibrationRepo";
+import type { SampleJob } from "@/services/calibrationSample";
+import { PlusIcon } from "../icons";
 import { PixelBadge } from "../PixelBadge";
 
 interface State {
   pair: CalibrationPair | null;
   strata: (StratumStats & { sampled: number })[];
   table: ThresholdRow[];
+  sampleJob: SampleJob | null;
 }
 
 const LABEL_TEXT: Record<Label, string> = { similar: "Parecida", different: "No parecida", unsure: "No sé" };
@@ -21,15 +24,43 @@ export function Labeler() {
   const [state, setState] = useState<State | null>(null);
   const [last, setLast] = useState<{ pair: CalibrationPair; label: Label } | null>(null);
   const [busy, setBusy] = useState(false);
+  /** Last finished "Generar más pares" job this page watched, shown until the next one. */
+  const [sampleDone, setSampleDone] = useState<SampleJob | null>(null);
+  const watching = useRef(false);
 
   const load = useCallback(async () => {
     const res = await fetch("/api/calibrate", { cache: "no-store" });
-    setState(await res.json());
+    const data: State = await res.json();
+    setState(data);
+    if (data.sampleJob?.running) watching.current = true;
+    else if (watching.current && data.sampleJob) {
+      watching.current = false;
+      setSampleDone(data.sampleJob);
+    }
   }, []);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  const sampling = state?.sampleJob?.running ?? false;
+  useEffect(() => {
+    if (!sampling) return;
+    const id = setInterval(load, 1000);
+    return () => clearInterval(id);
+  }, [sampling, load]);
+
+  const generate = async () => {
+    setSampleDone(null);
+    const res = await fetch("/api/calibrate/sample", { method: "POST" });
+    if (!res.ok && res.status !== 409) {
+      const data = await res.json().catch(() => ({}));
+      setSampleDone({ running: false, progress: null, result: null, error: data.error ?? res.statusText, finishedAt: null });
+      return;
+    }
+    watching.current = true;
+    await load();
+  };
 
   const send = useCallback(
     async (pairId: number, label: Label | null) => {
@@ -77,12 +108,34 @@ export function Labeler() {
 
   return (
     <>
-      <div className="panel info">
-        <span className="name">Calibración de umbrales</span>
-        <span className="meta">
-          ¿Considerarías estas dos placas parecidas, al punto de no querer subir una teniendo la otra? El score se muestra
-          recién después de etiquetar, para no condicionarte. Etiquetadas: {labeled} de {sampled}.
-        </span>
+      <div className="panel calib-head">
+        <div className="info">
+          <span className="name">Calibración de umbrales</span>
+          <span className="meta">
+            ¿Considerarías estas dos placas parecidas, al punto de no querer subir una teniendo la otra? El score se
+            muestra recién después de etiquetar, para no condicionarte. Etiquetadas: {labeled} de {sampled}.
+          </span>
+        </div>
+        <button type="button" className="btn small primary" disabled={sampling} onClick={generate}>
+          <PlusIcon size={14} />
+          Generar más pares
+        </button>
+        {sampling ? (
+          <p className="inline-progress">
+            <span className="spinner" aria-hidden />
+            {state.sampleJob?.progress
+              ? `Buscando pares en toda la base, bloque ${state.sampleJob.progress.done}/${state.sampleJob.progress.total}…`
+              : "Buscando pares en toda la base…"}
+          </p>
+        ) : sampleDone?.error ? (
+          <p className="error">{sampleDone.error}</p>
+        ) : sampleDone?.result ? (
+          <p className="meta">
+            Se agregaron {sampleDone.result.added} pares nuevos.
+            {sampleDone.result.below > 0 &&
+              ` ${sampleDone.result.below} pares ya muestreados quedaron debajo de la franja más baja: conservan la etiqueta pero no cuentan.`}
+          </p>
+        ) : null}
       </div>
 
       {p ? (
@@ -107,7 +160,11 @@ export function Labeler() {
           </div>
         </div>
       ) : (
-        <p className="empty">¡Listo! No quedan pares sin etiquetar. Podés generar más con npm run calibrate -- --sample.</p>
+        <p className="empty">
+          {sampled === 0
+            ? "Todavía no hay pares para etiquetar. Tocá Generar más pares para tomar una muestra de toda la base (tarda unos 35 s)."
+            : `¡Listo! No quedan pares sin etiquetar. Tocá Generar más pares para sumar hasta ${SAMPLE_EXTRA} por franja.`}
+        </p>
       )}
 
       {last && (

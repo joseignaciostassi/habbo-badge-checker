@@ -71,6 +71,12 @@ export const BadgeIcon = (p: P) => (
   </Icon>
 );
 
+export const PlusIcon = (p: P) => (
+  <Icon {...p}>
+    <path d="M5 12h14M12 5v14" />
+  </Icon>
+);
+
 export const XIcon = (p: P) => (
   <Icon {...p}>
     <path d="M18 6 6 18M6 6l12 12" />

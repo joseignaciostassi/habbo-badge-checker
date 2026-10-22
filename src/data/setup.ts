@@ -135,30 +135,18 @@ const g = globalThis as { __schemaChecked?: string };
  * Makes the database usable: creates it when missing (only if `create`) and applies pending
  * migrations. Cheap after the first call while no migration file is added.
  */
-export async function ensureDatabase(opts: { create: boolean; log?: (msg: string) => void }): Promise<DbState> {
+export async function ensureDatabase(opts: { create: boolean }): Promise<DbState> {
   const db = await checkDatabase();
   if (db.state === "unreachable" || (db.state === "missing" && !opts.create)) return db;
   if (db.state === "missing") {
     g.__schemaChecked = undefined; // a new (or dropped and recreated) database starts unmigrated
-    if (await createDatabase()) opts.log?.(`Base ${databaseTarget().database} creada.`);
+    await createDatabase();
   }
 
   const key = (await migrationFiles()).join(",");
   if (g.__schemaChecked !== key) {
-    for (const file of await applyMigrations()) opts.log?.(`Migración aplicada: ${file}`);
+    await applyMigrations();
     g.__schemaChecked = key;
   }
   return { state: "ready" };
-}
-
-export class DatabaseUnavailableError extends Error {}
-
-/** For the CLI scripts: same as the web's first run, without asking (creates and migrates as needed). */
-export async function prepareDatabase(): Promise<void> {
-  const db = await ensureDatabase({ create: true, log: (m) => console.log(m) });
-  if (db.state === "unreachable") {
-    throw new DatabaseUnavailableError(
-      `No se pudo conectar a PostgreSQL en ${databaseTarget().host}: ${db.error}\nRevisá DATABASE_URL en .env y que el servicio esté corriendo.`,
-    );
-  }
 }

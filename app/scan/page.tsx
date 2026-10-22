@@ -32,7 +32,7 @@ export default async function ScanPage({ searchParams }: { searchParams: Promise
   if (!run) {
     return (
       <p className="empty">
-        Todavía no hay un escaneo. Tocá <strong>Actualizar BD</strong> arriba (o corré <code>npm run scan</code>) para analizar toda la base.
+        Todavía no hay un escaneo. Tocá <strong>Actualizar BD</strong> arriba para analizar toda la base.
       </p>
     );
   }

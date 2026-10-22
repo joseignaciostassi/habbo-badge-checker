@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A local tool for a Habbo emulator ("holo") admin to check, before uploading a badge (40x40/42x42 GIF/PNG, usually static, sometimes animated), whether an identical or similar badge already exists among ~27k badges. Next.js (App Router) + TypeScript, `sharp` for decoding, PostgreSQL 18 (local now, Supabase later), images read from a local folder (Supabase Storage later). The UI, CLI output and conversation with the user are in Spanish (rioplatense).
+A local tool for a Habbo emulator ("holo") admin to check, before uploading a badge (40x40/42x42 GIF/PNG, usually static, sometimes animated), whether an identical or similar badge already exists among ~27k badges. Next.js (App Router) + TypeScript, `sharp` for decoding, PostgreSQL 18 (local now, Supabase later), images read from a local folder (Supabase Storage later). The UI and conversation with the user are in Spanish (rioplatense). Everything is done from the web; there are no CLI scripts.
 
 ## Commands
 
@@ -13,27 +13,22 @@ npm run dev                 # web UI on http://localhost:3000 (/, /scan, /calibr
 npm test                    # vitest (all tests, DB-free)
 npx vitest run tests/core.test.ts -t "empty frame"   # single file / single test
 npm run typecheck           # tsc --noEmit
-npm run index [-- --limit 200 --allow-mass-missing]   # incremental indexer over BADGES_DIR
-npm run compare -- <image> [--dhash N --sil N --design 0.575 --limit N]
-npm run scan [-- --design 0.725]  # full-base duplicate/similar scan, stored in scan_* tables
-npm run calibrate [-- --sample --per 12 --synthetic 300]  # threshold calibration report (--sample tops up each stratum to N pairs)
 ```
 
-Config lives in `.env` (see `.env.example`): `DATABASE_URL`, `BADGES_DIR`, `SIM_DHASH_MAX`, `SIM_SILHOUETTE_MAX`, `SIM_DESIGN_MIN` (web check), `SIM_SCAN_DESIGN_MIN` (scan). Scripts load it via `dotenv/config`; Next loads it itself.
+Config lives in `.env` (see `.env.example`): `DATABASE_URL`, `BADGES_DIR`, `SIM_DHASH_MAX`, `SIM_SILHOUETTE_MAX`, `SIM_DESIGN_MIN` (web check), `SIM_SCAN_DESIGN_MIN` (scan). Next loads it itself.
 
-There are no DB commands: `src/data/setup.ts` creates the database and applies pending migrations (`src/data/migrations/`, tracked in `schema_migrations`). The CLI scripts call `prepareDatabase()` (create + migrate without asking); the web applies pending migrations on its own and, when the database does not exist or PostgreSQL is unreachable, `SyncBanner` shows `SetupDialog` ("Crear base de datos" runs create + migrate + index + scan as one job; `/scan` and `/calibrate` render nothing until the database is ready). `checkDatabase()` probes the TCP port before using pg, because a refused `localhost` connection makes pg reject with an AggregateError that hangs Next dev renders.
+There are no DB commands: `src/data/setup.ts` creates the database and applies pending migrations (`src/data/migrations/`, tracked in `schema_migrations`). The web applies pending migrations on its own and, when the database does not exist or PostgreSQL is unreachable, `SyncBanner` shows `SetupDialog` ("Crear base de datos" runs create + migrate + index + scan as one job; `/scan` and `/calibrate` render nothing until the database is ready). `checkDatabase()` probes the TCP port before using pg, because a refused `localhost` connection makes pg reject with an AggregateError that hangs Next dev renders.
 
-Starting the app does not index or scan. Every page shows `SyncBanner` (`app/SyncBanner.tsx`), which asks `GET /api/sync` whether the folder differs from the index or the scan is older than the last change; its "Actualizar BD" button (`POST /api/sync`) runs the same index as the CLI and then an incremental scan in the background (`src/services/sync.ts`, job state on `globalThis`). The CLI `index`/`scan` and the web update share a PG advisory lock (`src/data/updateLock.ts`), so only one runs at a time.
+Starting the app does not index or scan. Every page shows `SyncBanner` (`app/SyncBanner.tsx`), which asks `GET /api/sync` whether the folder differs from the index or the scan is stale (older than the last change, or made with other thresholds than `config.scanThresholds`); its "Actualizar BD" button (`POST /api/sync`) runs the incremental index and then the scan in the background (`src/services/sync.ts`, job state on `globalThis`). "Actualizar BD", migrations and "Generar más pares" share a PG advisory lock (`src/data/updateLock.ts`), so only one runs at a time.
 
 ## Architecture
 
-Layers (the web and the scripts share everything below `app/`):
+Layers:
 
-- `src/core/` — pure image logic, no I/O. `analyzeBadge(buffer)` in `analyze.ts` is the single entry point used by the indexer, the CLI and the web API.
+- `src/core/` — pure image logic, no I/O. `analyzeBadge(buffer)` in `analyze.ts` is the single entry point used by the indexer and the web API.
 - `src/data/` — PostgreSQL via plain `pg` and SQL (no ORM). `badgeRepo.ts` (index + lookups), `scanRepo.ts`, `calibrationRepo.ts`. Pool cached on `globalThis` for Next dev HMR.
 - `src/storage/` — `ImageStore` interface; `LocalFsStore` reads `BADGES_DIR` read-only. A Supabase Storage implementation is meant to slot in here for the Vercel deploy.
-- `src/services/` — `checkBadge.ts` (analyze + exact + similar lookup; `/api/check` and `npm run compare`, both gated by `validateUpload.ts`: `.gif`/`.png` name, GIF/PNG content, ≤ 200 KB, ≤ 50x50 per frame; the pure rules in `src/core/uploadRules.ts` are also checked in the browser before uploading; the indexed folder is never limited), `indexBadges.ts` / `scanBadges.ts` (index and scan logic shared by the CLI and the web update), `sync.ts` (change status and the "Actualizar BD" job).
-- `src/scripts/` — thin CLI entry points over the services (run with `tsx`).
+- `src/services/` — `checkBadge.ts` (analyze + exact + similar lookup; `/api/check`, gated by `validateUpload.ts`: `.gif`/`.png` name, GIF/PNG content, ≤ 200 KB, ≤ 50x50 per frame; the pure rules in `src/core/uploadRules.ts` are also checked in the browser before uploading; the indexed folder is never limited), `indexBadges.ts` / `scanBadges.ts` (index and scan), `sync.ts` (change status and the "Actualizar BD" job), `calibrationSample.ts` (the "Generar más pares" job).
 
 ### Analysis pipeline (`src/core`)
 
@@ -57,9 +52,9 @@ hash prefilter (`dhash ≤ SIM_DHASH_MAX AND silhouette ≤ SIM_SILHOUETTE_MAX`)
 
 ### Scan and calibration
 
-- Incremental scan (`runScan` without `full`; the web update): when the previous run has the same thresholds and at most 25% of the active badges changed since its `started_at` (`indexed_at`/`missing_at`, rule in `src/core/scanMode.ts`), only those badges are compared against the whole base (`exactPairsFor`/`similarPairsFor`), the stored pairs between unchanged badges are kept, groups are recomputed from all pairs and the run is updated in place (`updateScan`). It relies on pairs between unchanged badges being stable, so changing `edge_iou()` without reindexing needs `npm run scan`, which is always full.
-- `npm run scan`: exact pairs via a self-join on shared hashes; similar pairs via a chunked `badge_frames` self-join in PG (4 chunks in parallel, ~35 s for 27k). Exact groups = connected components (`unionFind.ts`); similar groups = greedy star clusters (`starClusters.ts`: a center plus its direct neighbours, position 0 is the center) because connected components chained into one giant group. Results replace the previous run in `scan_runs`/`scan_pairs`/`scan_groups`; `/scan` only reads them.
-- `npm run calibrate --sample` re-stratifies the existing pairs by their current design score (labels are kept; pairs below 45% drop out) into 2.5-point bands (45–100%), stores population per band and tops up each band to `--per` pairs; `/calibrate` collects blind labels; `thresholdTable()` in `src/core/calibration.ts` weights labels by band population to estimate precision, coverage and false hits per check.
+- Incremental scan (`runScan`, run by "Actualizar BD"): when the previous run has the same thresholds and at most 25% of the active badges changed since its `started_at` (`indexed_at`/`missing_at`, rule in `src/core/scanMode.ts`), only those badges are compared against the whole base (`exactPairsFor`/`similarPairsFor`), the stored pairs between unchanged badges are kept, groups are recomputed from all pairs and the run is updated in place (`updateScan`). It relies on pairs between unchanged badges being stable, so a migration that changes `edge_iou()` without bumping `ANALYSIS_VERSION` must also `DELETE FROM scan_runs` to force a full scan.
+- Full scan: exact pairs via a self-join on shared hashes; similar pairs via a chunked `badge_frames` self-join in PG (4 chunks in parallel, ~35 s for 27k). Exact groups = connected components (`unionFind.ts`); similar groups = greedy star clusters (`starClusters.ts`: a center plus its direct neighbours, position 0 is the center) because connected components chained into one giant group. Results replace the previous run in `scan_runs`/`scan_pairs`/`scan_groups`; `/scan` only reads them.
+- "Generar más pares" on `/calibrate` (`POST /api/calibrate/sample`, `runCalibrationSample`) re-stratifies the existing pairs by their current design score (labels are kept; pairs below 45% drop out) into 2.5-point bands (45–100%), stores population per band and adds up to `SAMPLE_EXTRA` (12) new random pairs per band; `/calibrate` collects blind labels; `thresholdTable()` in `src/core/calibration.ts` weights labels by band population to estimate precision, coverage and false hits per check.
 
 ## Tests
 

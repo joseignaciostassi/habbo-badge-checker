@@ -1,4 +1,4 @@
-/** Limits for a badge to check (web upload and `npm run compare`); the indexed folder is not limited. */
+/** Limits for a badge to check (web upload); the indexed folder is not limited. */
 export const MAX_UPLOAD_BYTES = 200 * 1024;
 export const MAX_UPLOAD_SIDE = 50;
 const EXTENSIONS = [".gif", ".png"];

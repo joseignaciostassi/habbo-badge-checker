@@ -1,16 +1,17 @@
 import { NextResponse } from "next/server";
 import { thresholdTable } from "@/core/calibration";
 import { CalibrationRepository, type Label } from "@/data/calibrationRepo";
+import { getSampleJob } from "@/services/calibrationSample";
 
 export const runtime = "nodejs";
 
 const LABELS = new Set<Label>(["similar", "different", "unsure"]);
 
-/** Next pair to label, labeling progress and the current threshold estimates. */
+/** Next pair to label, labeling progress, the current threshold estimates and the "Generar más pares" job. */
 export async function GET() {
   const repo = new CalibrationRepository();
   const [pair, strata, badgeCount] = await Promise.all([repo.next(), repo.strataStats(), repo.badgeCount()]);
-  return NextResponse.json({ pair, strata, table: thresholdTable(strata, badgeCount) });
+  return NextResponse.json({ pair, strata, table: thresholdTable(strata, badgeCount), sampleJob: getSampleJob() });
 }
 
 /** Body: { pairId, label } with label null to undo. */

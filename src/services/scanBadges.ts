@@ -47,18 +47,18 @@ function sizes(gs: number[][]) {
 /**
  * Scan of the base: exact pairs (shared hashes) and similar pairs (prefilter + design score),
  * grouped and stored. When the previous run allows it (see scanMode) only the badges changed
- * since then are compared against the whole base and the other pairs are kept; otherwise, or
- * with `full`, every pair is recomputed and the previous run replaced. `onStart` says which.
+ * since then are compared against the whole base and the other pairs are kept; otherwise every
+ * pair is recomputed and the previous run replaced. `onStart` says which.
  */
 export async function runScan(
   t: Thresholds,
   onProgress?: ScanProgress,
-  opts: { full?: boolean; onStart?: (mode: "full" | "incremental", changed: number) => void } = {},
+  opts: { onStart?: (mode: "full" | "incremental", changed: number) => void } = {},
 ): Promise<ScanResult> {
   const repo = new ScanRepository();
   const startedAt = new Date();
 
-  const previous = opts.full ? null : await repo.latestRun();
+  const previous = await repo.latestRun();
   const changedIds = previous ? await repo.changedSince(previous.startedAt) : [];
   const mode = previous
     ? scanMode({ previous, thresholds: t, changed: changedIds.length, active: await repo.activeCount() })

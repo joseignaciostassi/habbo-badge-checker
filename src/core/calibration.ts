@@ -1,3 +1,6 @@
+/** New pairs added to each design band per "Generar más pares" (/calibrate). */
+export const SAMPLE_EXTRA = 12;
+
 /**
  * Design-score strata used for sampling: [lo, hi), 2.5-point bands from 45%. The last one
  * includes 1.0. Thresholds can only be estimated at these boundaries.

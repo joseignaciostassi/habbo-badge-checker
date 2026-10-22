@@ -1,17 +1,17 @@
 import { getPool } from "./db";
 
-/** Arbitrary key for the PG advisory lock shared by the web update and the index/scan scripts. */
+/** Arbitrary key for the PG advisory lock shared by "Actualizar BD", migrations and "Generar más pares". */
 const LOCK_KEY = 4_042_042;
 
 export class UpdateBusyError extends Error {
   constructor() {
-    super("Ya hay una actualización de la base en curso (desde la web o la terminal).");
+    super("Ya hay una actualización de la base en curso.");
   }
 }
 
 /**
- * Runs fn holding a session-level advisory lock, so the web "Actualizar BD" and
- * `npm run index` / `npm run scan` never write at the same time.
+ * Runs fn holding a session-level advisory lock, so database updates never overlap, even across
+ * processes (e.g. two dev servers on the same database).
  */
 export async function withUpdateLock<T>(fn: () => Promise<T>): Promise<T> {
   const client = await getPool().connect();

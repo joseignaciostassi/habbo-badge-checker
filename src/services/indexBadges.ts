@@ -6,8 +6,6 @@ import { getImageStore } from "../storage/localFsStore";
 const BATCH = 100;
 
 export interface IndexOptions {
-  /** Process at most this many pending files. */
-  limit?: number;
   /** Mark missing badges even when the safety brake trips. */
   allowMassMissing?: boolean;
   onProgress?: (done: number, total: number, errors: number) => void;
@@ -38,8 +36,7 @@ export async function runIndex(opts: IndexOptions = {}): Promise<IndexResult> {
   const repo = new PgBadgeRepository();
   const store = getImageStore();
   const diff = await computeFolderDiff(repo);
-  let pending = pendingFiles(diff);
-  if (opts.limit !== undefined) pending = pending.slice(0, opts.limit);
+  const pending = pendingFiles(diff);
 
   const started = Date.now();
   let done = 0, errors = 0;

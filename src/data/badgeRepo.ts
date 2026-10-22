@@ -15,17 +15,6 @@ export interface BadgeToSave {
   analysis: BadgeAnalysis;
 }
 
-export interface IndexSummary {
-  /** Active badges (in the folder). */
-  total: number;
-  /** Indexed badges whose file left the folder. */
-  missing: number;
-  bySize: { size: string; count: number }[];
-  animated: { fileName: string; frames: number }[];
-  rareSizes: { fileName: string; size: string; note: string }[];
-  errors: { fileName: string; error: string }[];
-}
-
 export interface BadgeInfo {
   id: number;
   fileName: string;
@@ -52,7 +41,6 @@ export interface BadgeRepository {
   saveBadges(batch: BadgeToSave[]): Promise<void>;
   markMissing(fileNames: string[]): Promise<void>;
   recordError(fileName: string, error: string): Promise<void>;
-  summary(): Promise<IndexSummary>;
   findExact(hashes: Buffer[]): Promise<ExactHit[]>;
   findSimilar(frames: FrameFingerprint[], t: Thresholds, limit: number): Promise<SimilarHit[]>;
   getBadge(id: number): Promise<BadgeInfo | null>;
@@ -232,29 +220,4 @@ export class PgBadgeRepository implements BadgeRepository {
     return rows[0] ? toInfo(rows[0]) : null;
   }
 
-  async summary(): Promise<IndexSummary> {
-    const [total, bySize, animated, rare, errors] = await Promise.all([
-      this.pool.query(
-        "SELECT count(*) FILTER (WHERE missing_at IS NULL)::int AS n, count(missing_at)::int AS missing FROM badges",
-      ),
-      this.pool.query(
-        `SELECT orig_width || 'x' || orig_height AS size, count(*)::int AS count
-         FROM badges WHERE missing_at IS NULL GROUP BY 1 ORDER BY 2 DESC`,
-      ),
-      this.pool.query("SELECT file_name, unique_frames FROM badges WHERE animated AND missing_at IS NULL ORDER BY file_name"),
-      this.pool.query(
-        `SELECT file_name, orig_width || 'x' || orig_height AS size, size_note
-         FROM badges WHERE size_note IS NOT NULL AND missing_at IS NULL ORDER BY orig_width, orig_height, file_name`,
-      ),
-      this.pool.query("SELECT file_name, error FROM index_errors ORDER BY file_name"),
-    ]);
-    return {
-      total: total.rows[0].n,
-      missing: total.rows[0].missing,
-      bySize: bySize.rows,
-      animated: animated.rows.map((r) => ({ fileName: r.file_name, frames: r.unique_frames })),
-      rareSizes: rare.rows.map((r) => ({ fileName: r.file_name, size: r.size, note: r.size_note })),
-      errors: errors.rows.map((r) => ({ fileName: r.file_name, error: r.error })),
-    };
-  }
 }

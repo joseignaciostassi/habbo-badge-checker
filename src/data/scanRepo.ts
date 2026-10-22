@@ -1,5 +1,6 @@
 import type pg from "pg";
 import type { Thresholds } from "../config";
+import { sameThresholds } from "../core/scanMode";
 import type { ExactKind } from "../core/types";
 import type { BadgeInfo } from "./badgeRepo";
 import { getPool } from "./db";
@@ -194,14 +195,20 @@ export class ScanRepository {
     }));
   }
 
-  /** When the last scan started, and whether any badge was indexed or marked missing after that. */
-  async freshness(): Promise<{ scannedAt: Date | null; stale: boolean }> {
+  /**
+   * When the last scan started and whether it needs redoing: no scan yet, a badge indexed or
+   * marked missing after it, or it was made with other thresholds than `t`.
+   */
+  async freshness(t: Thresholds): Promise<{ scannedAt: Date | null; stale: boolean; thresholdsChanged: boolean }> {
     const { rows } = await this.pool.query(
-      `SELECT (SELECT max(started_at) FROM scan_runs) AS scanned_at,
+      `SELECT (SELECT started_at FROM scan_runs ORDER BY id DESC LIMIT 1) AS scanned_at,
+              (SELECT thresholds FROM scan_runs ORDER BY id DESC LIMIT 1) AS thresholds,
               (SELECT max(greatest(indexed_at, missing_at)) FROM badges) AS changed_at`,
     );
-    const { scanned_at, changed_at } = rows[0];
-    return { scannedAt: scanned_at, stale: !scanned_at || (changed_at !== null && changed_at > scanned_at) };
+    const { scanned_at, thresholds, changed_at } = rows[0];
+    const thresholdsChanged = thresholds !== null && !sameThresholds(thresholds, t);
+    const changed = changed_at !== null && scanned_at !== null && changed_at > scanned_at;
+    return { scannedAt: scanned_at, stale: !scanned_at || changed || thresholdsChanged, thresholdsChanged };
   }
 
   async latestRun(): Promise<ScanRun | null> {

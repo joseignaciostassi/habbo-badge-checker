@@ -166,7 +166,13 @@ export function SyncBanner() {
           <span className="sync-text">
             {summary && <>Cambios en la carpeta de placas: {summary}. </>}
             {status.scanStale && (
-              <>{status.scannedAt ? "El escaneo es anterior a los últimos cambios." : "Todavía no hay un escaneo de la base."}</>
+              <>
+                {!status.scannedAt
+                  ? "Todavía no hay un escaneo de la base."
+                  : status.scanThresholdsChanged
+                    ? "Cambiaron los umbrales del escaneo (SIM_* en .env): hay que rehacerlo completo."
+                    : "El escaneo es anterior a los últimos cambios."}
+              </>
             )}
           </span>
           <button className="btn small primary" onClick={() => start()}>

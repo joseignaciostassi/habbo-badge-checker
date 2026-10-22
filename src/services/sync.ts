@@ -59,8 +59,10 @@ export interface SyncStatus {
   folder: FolderChanges | null;
   /** Folder differs from the index. */
   folderChanged: boolean;
-  /** No scan yet, or badges changed after the last one. */
+  /** No scan yet, badges changed after the last one, or it used other thresholds. */
   scanStale: boolean;
+  /** The last scan used other thresholds than SIM_* in .env (needs a full rescan). */
+  scanThresholdsChanged: boolean;
   scannedAt: string | null;
   job: SyncJob | null;
   /** Anything for "Actualizar BD" to do (missing badges held by the safety brake do not count). */
@@ -73,7 +75,14 @@ const g = globalThis as {
   __syncStatus?: { at: number; value: Promise<Omit<SyncStatus, "job">> };
 };
 
-const IDLE = { folder: null, folderChanged: false, scanStale: false, scannedAt: null, needsUpdate: false };
+const IDLE = {
+  folder: null,
+  folderChanged: false,
+  scanStale: false,
+  scanThresholdsChanged: false,
+  scannedAt: null,
+  needsUpdate: false,
+};
 
 async function computeStatus(): Promise<Omit<SyncStatus, "job">> {
   // Applies pending migrations on the way, so a code update never needs a manual step.
@@ -84,7 +93,7 @@ async function computeStatus(): Promise<Omit<SyncStatus, "job">> {
   }
   if (db.state === "unreachable") return { ...IDLE, setup: { state: "unreachable", ...databaseTarget(), error: db.error } };
 
-  const [diff, fresh] = await Promise.all([computeFolderDiff(), new ScanRepository().freshness()]);
+  const [diff, fresh] = await Promise.all([computeFolderDiff(), new ScanRepository().freshness(config.scanThresholds)]);
   const names = (fs: { name: string }[]) => fs.slice(0, EXAMPLES).map((f) => f.name);
   const folder: FolderChanges = {
     added: diff.added.length,
@@ -109,6 +118,7 @@ async function computeStatus(): Promise<Omit<SyncStatus, "job">> {
     folder,
     folderChanged,
     scanStale: fresh.stale,
+    scanThresholdsChanged: fresh.thresholdsChanged,
     scannedAt: fresh.scannedAt?.toISOString() ?? null,
     needsUpdate: (folderChanged && !onlyHeldMissing) || fresh.stale,
   };
@@ -167,7 +177,7 @@ export function startSync(opts: { allowMassMissing?: boolean; setup?: boolean } 
           blockedMissing: idx.blockedMissing,
           scanned: false,
         };
-        if ((await new ScanRepository().freshness()).stale) {
+        if ((await new ScanRepository().freshness(config.scanThresholds)).stale) {
           job.phase = "scanning";
           job.progress = null;
           const scan = await runScan(config.scanThresholds, (done, total) => (job.progress = { done, total }), {

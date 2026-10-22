@@ -34,11 +34,6 @@ const pairSelect = (extra = "") => `
 export class CalibrationRepository {
   constructor(private readonly pool: pg.Pool = getPool()) {}
 
-  async hasSample(): Promise<boolean> {
-    const { rows } = await this.pool.query("SELECT count(*)::int AS n FROM calibration_pairs");
-    return rows[0].n > 0;
-  }
-
   /**
    * Current design score of every sampled pair (best frame pair within the hash prefilter,
    * as in the scan), or null when no frame pair passes it.
