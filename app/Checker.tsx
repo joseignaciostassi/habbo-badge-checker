@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type ExactMatch, MATCH_LABELS } from "@/core/compare";
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_SIDE, sniffFormat, uploadProblem } from "@/core/uploadRules";
 import { PixelBadge } from "./PixelBadge";
 
 interface BadgeInfo {
@@ -16,6 +17,20 @@ interface CheckResponse {
   upload: { format: string; width: number; height: number; uniqueFrames: number; animated: boolean; sizeNote: string | null };
   exact: (BadgeInfo & { match: ExactMatch })[];
   similar: (BadgeInfo & { dhash: number; silhouette: number; design: number })[];
+}
+
+/** Same rules as the server, checked before uploading so drag & drop and Ctrl+V get them too. */
+async function checkLocally(f: File): Promise<string | null> {
+  const base = { name: f.name, size: f.size };
+  const early = uploadProblem(base);
+  if (early) return early;
+  const format = sniffFormat(new Uint8Array(await f.slice(0, 8).arrayBuffer()));
+  if (!format) return uploadProblem({ ...base, format });
+  const bitmap = await createImageBitmap(f).catch(() => null);
+  if (!bitmap) return "No se pudo leer la imagen.";
+  const { width, height } = bitmap;
+  bitmap.close();
+  return uploadProblem({ ...base, format, width, height });
 }
 
 interface Thresholds {
@@ -34,13 +49,15 @@ export function Checker({ defaults }: { defaults: Thresholds }) {
   const [over, setOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const pick = useCallback((f: File | undefined | null) => {
+  const pick = useCallback(async (f: File | undefined | null) => {
     if (!f) return;
-    setFile(f);
+    const problem = await checkLocally(f);
     setResult(null);
+    setFile(problem ? null : f);
+    setError(problem ? `${f.name}: ${problem}` : null);
     setPreview((old) => {
       if (old) URL.revokeObjectURL(old);
-      return URL.createObjectURL(f);
+      return problem ? null : URL.createObjectURL(f);
     });
   }, []);
 
@@ -98,7 +115,10 @@ export function Checker({ defaults }: { defaults: Thresholds }) {
           pick(e.dataTransfer.files[0]);
         }}
       >
-        <input ref={inputRef} type="file" accept="image/gif,image/png" onChange={(e) => pick(e.target.files?.[0])} />
+        <input ref={inputRef} type="file" accept=".gif,.png,image/gif,image/png" onChange={(e) => {
+            pick(e.target.files?.[0]);
+            e.target.value = ""; // so picking the same file again (e.g. after a rejection) fires onChange
+          }} />
         {preview && up ? (
           <PixelBadge src={preview} width={up.width} height={up.height} scale={4} box={210} title="Placa subida" />
         ) : (
@@ -116,7 +136,10 @@ export function Checker({ defaults }: { defaults: Thresholds }) {
               {up.sizeNote && <span className="meta">Tamaño fuera de lo normal ({up.sizeNote}): se normaliza a 40x40</span>}
             </>
           ) : (
-            <span className="hint">Arrastrá un GIF o PNG, hacé clic para elegirlo o pegalo con Ctrl+V.</span>
+            <span className="hint">
+              Arrastrá un GIF o PNG, hacé clic para elegirlo o pegalo con Ctrl+V. Máximo {MAX_UPLOAD_SIDE}x{MAX_UPLOAD_SIDE} y{" "}
+              {MAX_UPLOAD_BYTES / 1024} KB.
+            </span>
           )}
           {loading && <span className="status">Buscando…</span>}
           {error && <span className="error">{error}</span>}

@@ -46,7 +46,7 @@ Después abrí `http://localhost:3000`. Si la base todavía no existe, la web mu
 #### `npm run dev`
 Levanta la web en modo desarrollo en `http://localhost:3000`, con recarga automática al editar código. Al iniciar no indexa ni escanea; si hay migraciones nuevas, las aplica sola. Las páginas son:
 
-- `/` — **Verificar:** subís una placa (arrastrando, con clic o pegándola con Ctrl+V) y muestra los duplicados exactos y las similares, cada una ampliada en pixel-art al lado de la tuya. El slider de diseño ajusta el umbral en vivo; dHash y silueta están en "Prefiltro".
+- `/` — **Verificar:** subís una placa (arrastrando, con clic o pegándola con Ctrl+V) y muestra los duplicados exactos y las similares, cada una ampliada en pixel-art al lado de la tuya. El slider de diseño ajusta el umbral en vivo; dHash y silueta están en "Prefiltro". Solo acepta archivos `.gif` o `.png` con contenido GIF o PNG real, de hasta 50x50 y 200 KB; si no cumple, lo indica sin enviarlo.
 - `/scan` — **Escaneo:** los grupos de duplicados y de similares que ya existen en la base, según el último `npm run scan`.
 - `/calibrate` — **Calibración:** etiquetado de pares para calibrar los umbrales.
 
@@ -69,6 +69,7 @@ Corre todos los tests con Vitest. No necesitan la base de datos: generan placas 
 - Agrupamiento y las estimaciones de la calibración.
 - Qué placas son nuevas, modificadas, eliminadas o restauradas, y el freno de seguridad.
 - Cómo se interpretan los errores de conexión a PostgreSQL.
+- Los límites de la placa a verificar: extensión, formato real, peso y dimensiones.
 
 Para correr un solo archivo o un solo test:
 
@@ -138,7 +139,7 @@ npm run index -- --limit 200
 ### Comparación y escaneo
 
 #### `npm run compare -- <imagen>`
-Compara una imagen contra la base desde la terminal; es lo mismo que la página de verificación. Lista:
+Compara una imagen contra la base desde la terminal; es lo mismo que la página de verificación, con los mismos límites (`.gif`/`.png`, hasta 50x50 y 200 KB). Lista:
 
 - Los duplicados exactos, indicando si son idénticos, idénticos al recortar a 40x40 o con el mismo contenido en otra posición.
 - Las similares ordenadas por score de diseño, con sus distancias de dHash y silueta.

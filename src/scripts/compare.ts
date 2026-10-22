@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { parseArgs } from "node:util";
 import { config } from "../config";
 import { MATCH_LABELS } from "../core/compare";
@@ -7,6 +8,7 @@ import { PgBadgeRepository } from "../data/badgeRepo";
 import { closePool } from "../data/db";
 import { DatabaseUnavailableError, prepareDatabase } from "../data/setup";
 import { checkBadge } from "../services/checkBadge";
+import { validateUpload } from "../services/validateUpload";
 
 const { values: args, positionals } = parseArgs({
   allowPositionals: true,
@@ -25,6 +27,13 @@ async function main() {
     process.exitCode = 1;
     return;
   }
+  const image = await readFile(file);
+  const problem = await validateUpload(path.basename(file), image);
+  if (problem) {
+    console.error(`${file}: ${problem}`);
+    process.exitCode = 1;
+    return;
+  }
   await prepareDatabase();
   const thresholds = {
     dhash: args.dhash ? Number(args.dhash) : config.thresholds.dhash,
@@ -33,7 +42,7 @@ async function main() {
   };
   const limit = Number(args.limit);
 
-  const { analysis: a, exact, similar } = await checkBadge(new PgBadgeRepository(), await readFile(file), thresholds, limit);
+  const { analysis: a, exact, similar } = await checkBadge(new PgBadgeRepository(), image, thresholds, limit);
 
   console.log(`Placa: ${file}`);
   console.log(

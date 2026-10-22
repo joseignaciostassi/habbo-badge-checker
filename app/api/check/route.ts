@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { config } from "@/config";
 import { PgBadgeRepository } from "@/data/badgeRepo";
+import { MAX_UPLOAD_BYTES } from "@/core/uploadRules";
 import { checkBadge } from "@/services/checkBadge";
+import { validateUpload } from "@/services/validateUpload";
 
 export const runtime = "nodejs";
-
-const MAX_BYTES = 2 * 1024 * 1024;
 
 function threshold(v: FormDataEntryValue | null, fallback: number) {
   const n = Number(v);
@@ -21,7 +21,12 @@ export async function POST(req: Request) {
   const form = await req.formData();
   const file = form.get("file");
   if (!(file instanceof File)) return NextResponse.json({ error: "Falta el archivo" }, { status: 400 });
-  if (file.size > MAX_BYTES) return NextResponse.json({ error: "Archivo demasiado grande" }, { status: 413 });
+  if (file.size > MAX_UPLOAD_BYTES) {
+    return NextResponse.json({ error: `El archivo supera los ${MAX_UPLOAD_BYTES / 1024} KB.` }, { status: 413 });
+  }
+  const data = Buffer.from(await file.arrayBuffer());
+  const problem = await validateUpload(file.name, data);
+  if (problem) return NextResponse.json({ error: problem }, { status: 415 });
 
   const thresholds = {
     dhash: threshold(form.get("dhash"), config.thresholds.dhash),
@@ -32,7 +37,7 @@ export async function POST(req: Request) {
   try {
     const { analysis: a, exact, similar } = await checkBadge(
       new PgBadgeRepository(),
-      Buffer.from(await file.arrayBuffer()),
+      data,
       thresholds,
     );
     return NextResponse.json({

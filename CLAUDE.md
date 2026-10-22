@@ -32,7 +32,7 @@ Layers (the web and the scripts share everything below `app/`):
 - `src/core/` — pure image logic, no I/O. `analyzeBadge(buffer)` in `analyze.ts` is the single entry point used by the indexer, the CLI and the web API.
 - `src/data/` — PostgreSQL via plain `pg` and SQL (no ORM). `badgeRepo.ts` (index + lookups), `scanRepo.ts`, `calibrationRepo.ts`. Pool cached on `globalThis` for Next dev HMR.
 - `src/storage/` — `ImageStore` interface; `LocalFsStore` reads `BADGES_DIR` read-only. A Supabase Storage implementation is meant to slot in here for the Vercel deploy.
-- `src/services/` — `checkBadge.ts` (analyze + exact + similar lookup; `/api/check` and `npm run compare`), `indexBadges.ts` / `scanBadges.ts` (index and scan logic shared by the CLI and the web update), `sync.ts` (change status and the "Actualizar BD" job).
+- `src/services/` — `checkBadge.ts` (analyze + exact + similar lookup; `/api/check` and `npm run compare`, both gated by `validateUpload.ts`: `.gif`/`.png` name, GIF/PNG content, ≤ 200 KB, ≤ 50x50 per frame; the pure rules in `src/core/uploadRules.ts` are also checked in the browser before uploading; the indexed folder is never limited), `indexBadges.ts` / `scanBadges.ts` (index and scan logic shared by the CLI and the web update), `sync.ts` (change status and the "Actualizar BD" job).
 - `src/scripts/` — thin CLI entry points over the services (run with `tsx`).
 
 ### Analysis pipeline (`src/core`)
